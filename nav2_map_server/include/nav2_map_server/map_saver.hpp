@@ -21,21 +21,31 @@
 
 namespace nav2_map_server
 {
-
-class MapGenerator : public rclcpp::Node
+class MapSaver : public rclcpp::Node
 {
 public:
-  MapGenerator(const std::string & mapname, int threshold_occupied, int threshold_free);
+  explicit MapSaver(const rclcpp::NodeOptions & options);
 
   void mapCallback(const nav_msgs::msg::OccupancyGrid::SharedPtr map);
 
-  bool saved_map_;
+  std::shared_future<void> map_saved_future() {return save_next_map_promise.get_future().share();}
 
-private:
-  std::string mapname_;
+  bool did_show_help() {return show_help;}
+
+protected:
   rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::ConstSharedPtr map_sub_;
+
+  void try_write_map_to_file(const nav_msgs::msg::OccupancyGrid & map);
+
+  std::promise<void> save_next_map_promise;
+  enum MapMode { TRINARY, SCALE, RAW };
+
+  bool show_help;
+
+  std::string mapname_;
   int threshold_occupied_;
   int threshold_free_;
+  MapMode map_mode;
 };
 
 }  // namespace nav2_map_server

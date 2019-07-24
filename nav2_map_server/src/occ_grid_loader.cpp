@@ -129,7 +129,8 @@ OccGridLoader::on_configure(const rclcpp_lifecycle::State & /*state*/)
     if (mode_str == "trinary") {
       loadParameters.mode = TRINARY;
     } else if (mode_str == "scale") {
-      loadParameters.mode = SCALE;
+      RCLCPP_WARN(node_->get_logger(), "Mode 'scale' not implemented, using raw instead");
+      loadParameters.mode = RAW;
     } else if (mode_str == "raw") {
       loadParameters.mode = RAW;
     } else {

@@ -1,5 +1,4 @@
 /*
- * map_saver
  * Copyright (c) 2008, Willow Garage, Inc.
  * All rights reserved.
  *
@@ -28,83 +27,184 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "nav2_map_server/map_saver.hpp"
+
+#include <fstream>
+
 #include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <string>
 #include <memory>
+#include <string>
+#include "nav_msgs/msg/occupancy_grid.h"
+#include "nav_msgs/srv/get_map.hpp"
 #include "rclcpp/rclcpp.hpp"
-#include "nav2_map_server/map_generator.hpp"
+#include "tf2/LinearMath/Matrix3x3.h"
+#include "tf2/LinearMath/Quaternion.h"
 
-#define USAGE "Usage: \n" \
-  "  map_saver -h\n" \
-  "  map_saver [--occ <threshold_occupied>] [--free <threshold_free>] " \
-  "[-f <mapname>] [ROS remapping args]"
-
-using namespace std::chrono_literals;
-
-int main(int argc, char ** argv)
+namespace nav2_map_server
 {
-  rclcpp::init(argc, argv);
-  rclcpp::Logger logger = rclcpp::get_logger("map_saver");
+const std::string USAGE_STRING{
+  "Usage: \n"
+  "  map_saver -h\n"
+  "  map_saver [--occ <threshold_occupied>] [--free <threshold_free>] "
+  "[-f <mapname>] [ROS remapping args]"};
 
-  std::string mapname = "map";
-  int threshold_occupied = 65;
-  int threshold_free = 25;
+MapSaver::MapSaver(const rclcpp::NodeOptions & options) : Node("map_saver"), save_next_map_promise{}
+{
+  {
+    auto & arguments = options.arguments();
+    std::vector<rclcpp::Parameter> params_from_args;
+    for (auto it = arguments.begin(); it != arguments.end(); it++) {
+      std::cerr << "processing argument " << *it;
+      if (*it == "-h") {
+        params_from_args.emplace_back("show_help", true);
+      } else if (*it == "-f") {
+        if (++it == arguments.end()) {
+          RCLCPP_WARN(get_logger(), "Argument ignored: -f should be followed by a value.");
+          continue;
+        }
+        params_from_args.emplace_back("output_file_no_ext", *it);
+      } else if (*it == "--occ") {
+        if (++it == arguments.end()) {
+          RCLCPP_WARN(get_logger(), "Argument ignored: --occ should be followed by a value.");
+          continue;
+        }
+        params_from_args.emplace_back("threshold_occupied", atoi(it->c_str()));
+      } else if (*it == "--free") {
+        if (++it == arguments.end()) {
+          RCLCPP_WARN(get_logger(), "Argument ignored: --free should be followed by a value.");
+          continue;
+        }
+        params_from_args.emplace_back("threshold_free", atoi(it->c_str()));
+      } else if (*it == "--mode") {
+        if (++it == arguments.end()) {
+          RCLCPP_WARN(get_logger(), "Argument ignored: --mode should be followed by a value.");
+          continue;
+        }
+        params_from_args.emplace_back("map_mode", *it);
+      } else {
+        RCLCPP_WARN(get_logger(), "Ignoring unrecognized argument '%s'", it->c_str());
+      }
+    }
 
-  for (int i = 1; i < argc; i++) {
-    if (!strcmp(argv[i], "-h")) {
-      puts(USAGE);
-      return 0;
-    } else if (!strcmp(argv[i], "-f")) {
-      if (++i < argc) {
-        mapname = argv[i];
-      } else {
-        puts(USAGE);
-        return 1;
-      }
-    } else if (!strcmp(argv[i], "--occ")) {
-      if (++i < argc) {
-        threshold_occupied = atoi(argv[i]);
-        if (threshold_occupied < 1 || threshold_occupied > 100) {
-          RCLCPP_ERROR(logger, "Threshold_occupied must be between 1 and 100");
-          return 1;
-        }
-      } else {
-        puts(USAGE);
-        return 1;
-      }
-    } else if (!strcmp(argv[i], "--free")) {
-      if (++i < argc) {
-        threshold_free = atoi(argv[i]);
-        if (threshold_free < 0 || threshold_free > 100) {
-          RCLCPP_ERROR(logger, "Threshold_free must be between 0 and 100");
-          return 1;
-        }
-      } else {
-        puts(USAGE);
-        return 1;
-      }
+    show_help = declare_parameter("show_help", false);
+    if (show_help) {
+      std::cout << USAGE_STRING << std::endl;
+      return;
+    }
+    mapname_ = declare_parameter("output_file_no_ext", "map");
+    if (mapname_.empty()) {
+      throw std::runtime_error("Map name not provided");
+    }
+    threshold_occupied_ = declare_parameter("threshold_occupied", 65);
+    if (threshold_occupied_ < 1 || 100 < threshold_occupied_) {
+      throw std::runtime_error("Threshold_occupied must be between 1 and 100");
+    }
+    threshold_free_ = declare_parameter("threshold_free", 25);
+    if (threshold_free_ < 0 || 100 < threshold_free_) {
+      throw std::runtime_error("Free threshold must be between 0 and 100");
+    }
+    if (threshold_occupied_ <= threshold_free_) {
+      throw std::runtime_error("Threshold_free must be smaller than threshold_occupied");
+    }
+
+    std::string mode_str = declare_parameter("mode", "trinary");
+    if (mode_str == "trinary") {
+      map_mode = TRINARY;
+    } else if (mode_str == "scale") {
+      map_mode = SCALE;
+    } else if (mode_str == "raw") {
+      map_mode = RAW;
     } else {
-      puts(USAGE);
-      return 1;
+      RCLCPP_WARN(
+        get_logger(), "Mode parameter not recognized: '%s', using default value (trinary)",
+        mode_str.c_str());
+      map_mode = TRINARY;
+    }
+
+    RCLCPP_INFO(get_logger(), "Waiting for the map");
+    map_sub_ = create_subscription<nav_msgs::msg::OccupancyGrid>(
+      "map", rclcpp::SystemDefaultsQoS(),
+      std::bind(&MapSaver::mapCallback, this, std::placeholders::_1));
+  }
+}
+
+void MapSaver::try_write_map_to_file(const nav_msgs::msg::OccupancyGrid & map)
+{
+  rclcpp::Logger logger = this->get_logger();
+  RCLCPP_INFO(
+    logger, "Received a %d X %d map @ %.3f m/pix", map.info.width, map.info.height,
+    map.info.resolution);
+
+  std::string mapdatafile = mapname_ + ".pgm";
+  RCLCPP_INFO(logger, "Writing map occupancy data to %s", mapdatafile.c_str());
+  {
+    std::ofstream map_data(mapdatafile);
+    map_data.exceptions(~std::ostream::goodbit);
+
+    // map_data.open(mapdatafile.c_str());
+    //    fprintf(
+    //      map_data, "P5\n# CREATOR: map_saver.cpp %.3f m/pix\n%d %d\n255\n", map.info.resolution,
+    //      map->info.width, map->info.height);
+    map_data << "P5\n"
+             << "# CREATOR: map_saver.cpp " << map.info.resolution << " m/pix\n"
+             << map.info.width << " " << map.info.height << "\n255\n";
+    map_data.exceptions();
+    for (size_t y = 0; y < map.info.height; y++) {
+      for (size_t x = 0; x < map.info.width; x++) {
+        size_t i = x + (map.info.height - y - 1) * map.info.width;
+        int8_t raw_pixel = map.data[i];
+        switch (map_mode) {
+          case TRINARY:
+            map_data.put(
+              raw_pixel == -1
+                ? 205
+                : raw_pixel <= threshold_free_ ? 254 : raw_pixel >= threshold_occupied_ ? 0 : 205);
+            break;
+          case SCALE:
+            map_data.put(
+              raw_pixel == -1
+                ? 205
+                : raw_pixel <= threshold_free_ ? 254 : raw_pixel >= threshold_occupied_ ? 0 : 205);
+            break;
+          case RAW:
+            map_data.put(raw_pixel);
+            break;
+        }
+      }
     }
   }
 
-  if (threshold_occupied <= threshold_free) {
-    RCLCPP_ERROR(logger, "Threshold_free must be smaller than threshold_occupied");
-    return 1;
+  std::string mapmetadatafile = mapname_ + ".yaml";
+  RCLCPP_INFO(logger, "Writing map metadata to %s", mapmetadatafile.c_str());
+  {
+    std::ofstream yaml(mapmetadatafile);
+
+    geometry_msgs::msg::Quaternion orientation = map.info.origin.orientation;
+    tf2::Matrix3x3 mat(tf2::Quaternion(orientation.x, orientation.y, orientation.z, orientation.w));
+    double yaw, pitch, roll;
+    mat.getEulerYPR(yaw, pitch, roll);
+
+    yaml << "image: " << mapdatafile.c_str() << "\nresolution: " << map.info.resolution
+         << "\norigin: [" << map.info.origin.position.x << ", " << map.info.origin.position.y
+         << ", " << yaw << "]\n"
+         << "\nnegate: 0"
+         << "occupied_thresh: " << threshold_occupied_ / 100.0
+         << "free_thresh: " << threshold_free_ / 100.0;
   }
-
-  auto map_gen = std::make_shared<nav2_map_server::MapGenerator>(mapname, threshold_occupied,
-      threshold_free);
-
-  auto sleep_dur = std::chrono::milliseconds(100);
-  while (!map_gen->saved_map_ && rclcpp::ok()) {
-    rclcpp::spin_some(map_gen);
-    rclcpp::sleep_for(sleep_dur);
-  }
-
-  rclcpp::shutdown();
-  return 0;
+  RCLCPP_INFO(logger, "Map saved");
 }
+
+void MapSaver::mapCallback(const nav_msgs::msg::OccupancyGrid::SharedPtr map)
+{
+  auto current_promise = std::move(save_next_map_promise);
+  save_next_map_promise = std::promise<void>();
+
+  try {
+    try_write_map_to_file(*map);
+    current_promise.set_value();
+  } catch (std::exception & e) {
+    RCLCPP_ERROR(get_logger(), "Failed to write map for reason: %s", e.what());
+    current_promise.set_exception(std::current_exception());
+  }
+}
+}  // namespace nav2_map_server

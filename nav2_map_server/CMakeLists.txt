@@ -30,7 +30,7 @@ add_executable(${map_server_executable}
 )
 
 add_executable(${map_saver_executable}
-  src/map_saver.cpp
+  src/map_saver_main.cpp
 )
 
 set(library_name ${map_server_executable}_core)
@@ -38,7 +38,7 @@ set(library_name ${map_server_executable}_core)
 add_library(${library_name} SHARED
   src/occ_grid_loader.cpp
   src/map_server.cpp
-  src/map_generator.cpp
+  src/map_saver.cpp
 )
 
 set(map_server_dependencies
