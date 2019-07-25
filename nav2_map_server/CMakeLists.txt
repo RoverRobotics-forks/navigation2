@@ -16,8 +16,8 @@ find_package(tf2 REQUIRED)
 find_package(nav2_util REQUIRED)
 find_package(GraphicsMagick++ REQUIRED)
 
-include_directories(SYSTEM ${MAGICK++_INCLUDE_DIRS})
-link_libraries(${MAGICK++_LIBRARIES})
+include_directories(SYSTEM ${GraphicsMagick++_INCLUDE_DIRS})
+link_libraries(${GraphicsMagick++_LIBRARIES})
 
 nav2_package()
 
