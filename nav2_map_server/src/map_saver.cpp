@@ -31,8 +31,10 @@
 #include <fstream>
 #include "Magick++.h"
 
+#include <yaml-cpp/yaml.h>
 #include <cstdio>
 #include <memory>
+#include <nav2_map_server/map_mode.hpp>
 #include <string>
 #include "nav_msgs/msg/occupancy_grid.h"
 #include "nav_msgs/srv/get_map.hpp"
@@ -64,14 +66,10 @@ MapSaver::MapSaver(const rclcpp::NodeOptions & options)
     }
 
     std::string mode_str = declare_parameter("map_mode", "trinary");
-    if (mode_str == "trinary") {
-      map_mode = TRINARY;
-    } else if (mode_str == "scale") {
-      map_mode = SCALE;
-    } else if (mode_str == "raw") {
-      map_mode = RAW;
-    } else {
-      map_mode = TRINARY;
+    try {
+      map_mode = map_mode_from_string(mode_str);
+    } catch (std::invalid_argument &) {
+      map_mode = MapMode::Trinary;
       RCLCPP_WARN(
         get_logger(), "Map mode parameter not recognized: '%s', using default value (trinary)",
         mode_str.c_str());
@@ -109,11 +107,11 @@ void MapSaver::try_write_map_to_file(const nav_msgs::msg::OccupancyGrid & map)
     image.depth(8);
     image.magick(image_format);
     RCLCPP_INFO(logger, "mode %d", map_mode);
-    if (!image.matte() && map_mode == SCALE) {
+    if (!image.matte() && map_mode == MapMode::Scale) {
       RCLCPP_WARN(
         logger,
         "Map mode 'scale' requires transparency, but format '%s' does not support it. Consider "
-        "switching image format to 'PNG'.",
+        "switching image format to 'png'.",
         image_format.c_str());
     }
     for (size_t y = 0; y < map.info.height; y++) {
@@ -124,7 +122,7 @@ void MapSaver::try_write_map_to_file(const nav_msgs::msg::OccupancyGrid & map)
         Magick::Color pixel;
 
         switch (map_mode) {
-          case TRINARY:
+          case MapMode::Trinary:
             if (map_cell == -1) {
               pixel = Magick::ColorGray(205 / 255.0);
             } else if (map_cell <= threshold_free_) {
@@ -135,14 +133,14 @@ void MapSaver::try_write_map_to_file(const nav_msgs::msg::OccupancyGrid & map)
               pixel = Magick::ColorGray(205 / 255.0);
             }
             break;
-          case SCALE:
+          case MapMode::Scale:
             if (map_cell == -1) {
               pixel = Magick::Color{};
             } else {
               pixel = Magick::ColorGray((100.0 - map_cell) / 100.0);
             }
             break;
-          case RAW:
+          case MapMode::Raw:
             if (map_cell == -1) {
               pixel = Magick::ColorGray(1.0);
             } else {
@@ -169,12 +167,27 @@ void MapSaver::try_write_map_to_file(const nav_msgs::msg::OccupancyGrid & map)
     double yaw, pitch, roll;
     mat.getEulerYPR(yaw, pitch, roll);
 
-    yaml << "image: " << mapdatafile.c_str() << "\nresolution: " << map.info.resolution
-         << "\norigin: [" << map.info.origin.position.x << ", " << map.info.origin.position.y
-         << ", " << yaw << "]\n"
-         << "\nnegate: 0"
-         << "occupied_thresh: " << threshold_occupied_ / 100.0
-         << "free_thresh: " << threshold_free_ / 100.0;
+    YAML::Emitter e;
+    e << YAML::Precision(3);
+    e << YAML::BeginMap;
+    e << YAML::Key << "image" << YAML::Value << mapdatafile;
+    e << YAML::Key << "mode" << YAML::Value << map_mode_to_string(map_mode);
+    e << YAML::Key << "resolution" << YAML::Value << map.info.resolution;
+    e << YAML::Key << "origin" << YAML::Flow << YAML::BeginSeq << map.info.origin.position.x <<
+      map.info.origin.position.y << yaw << YAML::EndSeq;
+    e << YAML::Key << "negate" << YAML::Value << false;
+    e << YAML::Key << "occupied_thresh" << YAML::Value << threshold_occupied_ / 100.0;
+    e << YAML::Key << "free_thresh" << YAML::Value << threshold_free_ / 100.0;
+    e << YAML::Key << YAML::Key;
+
+    if (!e.good()) {
+      RCLCPP_WARN(
+        logger, "YAML writer failed with an error %s. The map metadata may be invalid.",
+        e.GetLastError().c_str());
+    }
+
+    RCLCPP_INFO(logger, "Writing map metadata to %s", mapmetadatafile.c_str());
+    std::ofstream(mapmetadatafile) << e.c_str();
   }
   RCLCPP_INFO(logger, "Map saved");
 }

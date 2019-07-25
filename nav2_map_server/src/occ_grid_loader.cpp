@@ -38,8 +38,8 @@
 #include <string>
 #include <vector>
 
+#include "Magick++.h"
 #include "tf2/LinearMath/Quaternion.h"
-#include "SDL/SDL_image.h"
 #include "yaml-cpp/yaml.h"
 
 using namespace std::chrono_literals;
@@ -126,23 +126,18 @@ OccGridLoader::on_configure(const rclcpp_lifecycle::State & /*state*/)
     mode_str = doc["mode"].as<std::string>();
 
     // Convert the string version of the mode name to one of the enumeration values
-    if (mode_str == "trinary") {
-      loadParameters.mode = TRINARY;
-    } else if (mode_str == "scale") {
-      RCLCPP_WARN(node_->get_logger(), "Mode 'scale' not implemented, using raw instead");
-      loadParameters.mode = RAW;
-    } else if (mode_str == "raw") {
-      loadParameters.mode = RAW;
-    } else {
-      RCLCPP_WARN(node_->get_logger(),
-        "Mode parameter not recognized: '%s', using default value (trinary)",
+    try {
+      loadParameters.mode = map_mode_from_string(mode_str);
+    } catch (std::invalid_argument &) {
+      RCLCPP_WARN(
+        node_->get_logger(), "Mode parameter not recognized: '%s', using default value (trinary)",
         mode_str.c_str());
-      loadParameters.mode = TRINARY;
+      loadParameters.mode = MapMode::Trinary;
     }
   } catch (YAML::Exception & e) {
     RCLCPP_WARN(node_->get_logger(),
       "Mode parameter not set, using default value (trinary): %s", e.what());
-    loadParameters.mode = TRINARY;
+    loadParameters.mode = MapMode::Trinary;
   }
 
   try {
@@ -162,7 +157,7 @@ OccGridLoader::on_configure(const rclcpp_lifecycle::State & /*state*/)
   RCLCPP_DEBUG(node_->get_logger(), "mode: %d", loadParameters.mode);
   RCLCPP_DEBUG(node_->get_logger(), "negate: %d", loadParameters.negate);
 
-  loadMapFromFile(map_filename, &loadParameters);
+  loadMapFromFile(map_filename, loadParameters);
 
   // Create a service callback handle
   auto handle_occ_callback = [this](
@@ -221,116 +216,81 @@ OccGridLoader::on_cleanup(const rclcpp_lifecycle::State & /*state*/)
   return nav2_util::CallbackReturn::SUCCESS;
 }
 
-void
-OccGridLoader::loadMapFromFile(const std::string & map_name, LoadParameters * loadParameters)
+void OccGridLoader::loadMapFromFile(
+  const std::string & map_name, const LoadParameters & loadParameters)
 {
-  RCLCPP_DEBUG(node_->get_logger(), "OccGridLoader: loadMapFromFile");
+  Magick::InitializeMagick(nullptr);
+  nav_msgs::msg::OccupancyGrid msg;
+  Magick::Image img;
 
-  // Load the image using SDL.  If we get NULL back, the image load failed.
-  SDL_Surface * img;
+  img.read(map_name);
+
+  // todo: do we need img.throwImageException()? here
+  /*
   if (!(img = IMG_Load(map_name.c_str()))) {
-    std::string errmsg = std::string("failed to open image file \"") +
-      map_name + std::string("\": ") + IMG_GetError();
+    std::string errmsg =
+      std::string("failed to open image file \"") + map_name + std::string("\": ") + IMG_GetError();
     throw std::runtime_error(errmsg);
   }
+   */
 
   // Copy the image data into the map structure
-  msg_->info.width = img->w;
-  msg_->info.height = img->h;
-  msg_->info.resolution = loadParameters->resolution;
-  msg_->info.origin.position.x = loadParameters->origin[0];
-  msg_->info.origin.position.y = loadParameters->origin[1];
-  msg_->info.origin.position.z = 0.0;
+  msg.info.width = img.size().width();
+  msg.info.height = img.size().height();
+  msg.info.resolution = loadParameters.resolution;
+  msg.info.origin.position.x = loadParameters.origin[0];
+  msg.info.origin.position.y = loadParameters.origin[1];
+  msg.info.origin.position.z = 0.0;
   tf2::Quaternion q;
-  q.setRPY(0, 0, loadParameters->origin[2]);
-  msg_->info.origin.orientation.x = q.x();
-  msg_->info.origin.orientation.y = q.y();
-  msg_->info.origin.orientation.z = q.z();
-  msg_->info.origin.orientation.w = q.w();
+  q.setRPY(0, 0, loadParameters.origin[2]);
+  msg.info.origin.orientation.x = q.x();
+  msg.info.origin.orientation.y = q.y();
+  msg.info.origin.orientation.z = q.z();
+  msg.info.origin.orientation.w = q.w();
 
   // Allocate space to hold the data
-  msg_->data.resize(msg_->info.width * msg_->info.height);
-
-  // Get values that we'll need to iterate through the pixels
-  int rowstride = img->pitch;
-  int n_channels = img->format->BytesPerPixel;
-
-  // NOTE: Trinary mode still overrides here to preserve existing behavior.
-  // Alpha will be averaged in with color channels when using trinary mode.
-  int avg_channels;
-  if (loadParameters->mode == TRINARY || !img->format->Amask) {
-    avg_channels = n_channels;
-  } else {
-    avg_channels = n_channels - 1;
-  }
+  msg.data.resize(msg.info.width * msg.info.height);
 
   // Copy pixel data into the map structure
-  unsigned char * pixels = (unsigned char *)(img->pixels);
-  int color_sum;
-  for (unsigned int j = 0; j < msg_->info.height; j++) {
-    for (unsigned int i = 0; i < msg_->info.width; i++) {
-      // Compute mean of RGB for this pixel
-      unsigned char * p = pixels + j * rowstride + i * n_channels;
-      color_sum = 0;
-      for (int k = 0; k < avg_channels; k++) {
-        color_sum += *(p + (k));
-      }
-      double color_avg = color_sum / static_cast<double>(avg_channels);
+  for (size_t j = 0; j < msg.info.height; j++) {
+    for (size_t i = 0; i < msg.info.width; i++) {
+      auto pixel = img.pixelColor(i, j);
 
-      int alpha;
-      if (n_channels == 1) {
-        alpha = 1;
-      } else {
-        alpha = *(p + n_channels - 1);
-      }
-
-      if (loadParameters->negate) {
-        color_avg = 255 - color_avg;
-      }
-
-#define MAP_IDX(sx, i, j) ((sx) * (j) + (i))
-
-      unsigned char value;
-      if (loadParameters->mode == RAW) {
-        value = color_avg;
-        msg_->data[MAP_IDX(msg_->info.width, i, msg_->info.height - j - 1)] = value;
-        continue;
-      }
+      // shade of the pixel: 0=black 1=white
+      auto shade = Magick::Color::scaleQuantumToDouble(
+        (pixel.redQuantum() + pixel.blueQuantum() + pixel.greenQuantum()) / 3.0);
 
       // If negate is true, we consider blacker pixels free, and whiter
       // pixels free.  Otherwise, it's vice versa.
-      double occ = (255 - color_avg) / 255.0;
+      auto occ = loadParameters.negate ? shade : 1.0 - shade;
 
-      // Apply thresholds to RGB means to determine occupancy values for
-      // map.  Note that we invert the graphics-ordering of the pixels to
-      // produce a map with cell (0,0) in the lower-left corner.
-      if (occ > loadParameters->occupied_thresh) {
-        value = +100;
-      } else if (occ < loadParameters->free_thresh) {
-        value = 0;
-      } else if (loadParameters->mode == TRINARY || alpha < 1.0) {
-        value = -1;
-      } else {
-        double ratio = (occ - loadParameters->free_thresh) /
-          (loadParameters->occupied_thresh - loadParameters->free_thresh);
-        value = 99 * ratio;
+      uint8_t map_cell;
+      switch (loadParameters.mode) {
+        case MapMode::Trinary:
+          map_cell =
+            occ > loadParameters.occupied_thresh ? +100 : occ < loadParameters.free_thresh ? 0 : -1;
+          break;
+        case MapMode::Scale:
+          map_cell = pixel.alpha() < 1.0 ? -1 : occ * 100;
+          break;
+        case MapMode::Raw:
+          map_cell = (uint8_t)(occ * 256);
+          break;
+        default:
+          throw std::runtime_error("Invalid map mode");
       }
-
-      msg_->data[MAP_IDX(msg_->info.width, i, msg_->info.height - j - 1)] = value;
+      msg.data[msg.info.width * j + i] = map_cell;
     }
   }
 
-  SDL_FreeSurface(img);
-
-  msg_->info.map_load_time = node_->now();
-  msg_->header.frame_id = frame_id_;
-  msg_->header.stamp = node_->now();
+  msg.info.map_load_time = node_->now();
+  msg.header.frame_id = frame_id_;
+  msg.header.stamp = node_->now();
 
   RCLCPP_DEBUG(node_->get_logger(), "Read map %s: %d X %d map @ %.3lf m/cell",
     map_name.c_str(),
-    msg_->info.width,
-    msg_->info.height,
-    msg_->info.resolution);
+    msg.info.width, msg.info.height, msg.info.resolution);
+  *msg_ = msg;
 }
 
 }  // namespace nav2_map_server

@@ -16,8 +16,9 @@
 #define NAV2_MAP_SERVER__MAP_GENERATOR_HPP_
 
 #include <string>
-#include "rclcpp/rclcpp.hpp"
+#include "map_mode.hpp"
 #include "nav_msgs/srv/get_map.hpp"
+#include "rclcpp/rclcpp.hpp"
 
 namespace nav2_map_server
 {
@@ -36,13 +37,12 @@ protected:
   void try_write_map_to_file(const nav_msgs::msg::OccupancyGrid & map);
 
   std::promise<void> save_next_map_promise;
-  enum MapMode { TRINARY, SCALE, RAW };
 
   std::string image_format;
   std::string mapname_;
   int threshold_occupied_;
   int threshold_free_;
-  MapMode map_mode;
+  nav2_map_server::MapMode map_mode;
 };
 
 }  // namespace nav2_map_server

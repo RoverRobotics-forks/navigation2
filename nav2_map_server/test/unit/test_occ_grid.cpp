@@ -144,14 +144,14 @@ TEST_F(MapLoaderTest, loadValidPNG)
   loadParameters.origin[2] = 0;
   loadParameters.free_thresh = 0.196;
   loadParameters.occupied_thresh = 0.65;
-  loadParameters.mode = nav2_map_server::OccGridLoader::TRINARY;
+  loadParameters.mode = nav2_map_server::MapMode::Trinary;
   loadParameters.negate = 0;
 
   // In order to loadMapFromFile without going through the Configure and Activate states,
   // the msg_ member must be initialized
   map_loader_->msg_ = std::make_unique<nav_msgs::msg::OccupancyGrid>();
 
-  ASSERT_NO_THROW(map_loader_->loadMapFromFile(test_png.string(), &loadParameters));
+  ASSERT_NO_THROW(map_loader_->loadMapFromFile(test_png.string(), loadParameters));
   nav_msgs::msg::OccupancyGrid map_msg = map_loader_->getOccupancyGrid();
 
   EXPECT_FLOAT_EQ(map_msg.info.resolution, g_valid_image_res);
@@ -176,14 +176,14 @@ TEST_F(MapLoaderTest, loadValidBMP)
   loadParameters.origin[2] = 0;
   loadParameters.free_thresh = 0.196;
   loadParameters.occupied_thresh = 0.65;
-  loadParameters.mode = nav2_map_server::OccGridLoader::TRINARY;
+  loadParameters.mode = nav2_map_server::MapMode::Trinary;
   loadParameters.negate = 0;
 
   // In order to loadMapFromFile without going through the Configure and Activate states,
   // the msg_ member must be initialized
   map_loader_->msg_ = std::make_unique<nav_msgs::msg::OccupancyGrid>();
 
-  ASSERT_NO_THROW(map_loader_->loadMapFromFile(test_bmp.string(), &loadParameters));
+  ASSERT_NO_THROW(map_loader_->loadMapFromFile(test_bmp.string(), loadParameters));
   nav_msgs::msg::OccupancyGrid map_msg = map_loader_->getOccupancyGrid();
 
   EXPECT_FLOAT_EQ(map_msg.info.resolution, g_valid_image_res);
@@ -207,9 +207,9 @@ TEST_F(MapLoaderTest, loadInvalidFile)
   loadParameters.origin[2] = 0;
   loadParameters.free_thresh = 0.196;
   loadParameters.occupied_thresh = 0.65;
-  loadParameters.mode = nav2_map_server::OccGridLoader::TRINARY;
+  loadParameters.mode = nav2_map_server::MapMode::Trinary;
   loadParameters.negate = 0;
 
   ASSERT_THROW(map_loader_->loadMapFromFile(
-      test_invalid.string(), &loadParameters), std::runtime_error);
+      test_invalid.string(), loadParameters), std::runtime_error);
 }

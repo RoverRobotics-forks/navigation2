@@ -16,13 +16,15 @@
 #define NAV2_MAP_SERVER__OCC_GRID_LOADER_HPP_
 
 #include <memory>
+#include <nav2_map_server/occ_grid_loader.hpp>
 #include <string>
 #include <vector>
 
-#include "rclcpp/rclcpp.hpp"
+#include "map_mode.hpp"
+#include "nav2_util/lifecycle_node.hpp"
 #include "nav_msgs/msg/occupancy_grid.hpp"
 #include "nav_msgs/srv/get_map.hpp"
-#include "nav2_util/lifecycle_node.hpp"
+#include "rclcpp/rclcpp.hpp"
 
 namespace nav2_map_server
 {
@@ -46,19 +48,18 @@ protected:
   // The name of the YAML file from which to get the conversion parameters
   std::string yaml_filename_;
 
-  typedef enum { TRINARY, SCALE, RAW } MapMode;
   typedef struct
   {
     double resolution{0};
     std::vector<double> origin{0, 0, 0};
-    double free_thresh{0};
-    double occupied_thresh{0};
-    MapMode mode{TRINARY};
-    int negate{0};
+    double free_thresh;
+    double occupied_thresh;
+    MapMode mode;
+    bool negate;
   } LoadParameters;
 
   // Load the image and generate an OccupancyGrid
-  void loadMapFromFile(const std::string & filename, LoadParameters * loadParameters);
+  void loadMapFromFile(const std::string & filename, const LoadParameters & loadParameters);
 
   // A service to provide the occupancy grid (GetMap) and the message to return
   rclcpp::Service<nav_msgs::srv::GetMap>::SharedPtr occ_service_;
