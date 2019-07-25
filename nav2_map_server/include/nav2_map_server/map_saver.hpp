@@ -30,8 +30,6 @@ public:
 
   std::shared_future<void> map_saved_future() {return save_next_map_promise.get_future().share();}
 
-  bool did_show_help() {return show_help;}
-
 protected:
   rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::ConstSharedPtr map_sub_;
 
@@ -40,8 +38,7 @@ protected:
   std::promise<void> save_next_map_promise;
   enum MapMode { TRINARY, SCALE, RAW };
 
-  bool show_help;
-
+  std::string image_format;
   std::string mapname_;
   int threshold_occupied_;
   int threshold_free_;

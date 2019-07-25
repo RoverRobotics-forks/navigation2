@@ -33,11 +33,61 @@
 
 using namespace std::chrono_literals;
 
+const std::string USAGE_STRING{
+  "Usage: \n"
+  "  map_saver -h\n"
+  "  map_saver [--occ <threshold_occupied>] [--free <threshold_free>] [--fmt <image_format>] "
+  "[-f <mapname>] [ROS remapping args]"};
+
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
 
-  auto node = std::make_shared<nav2_map_server::MapSaver>(rclcpp::NodeOptions());
+  auto logger = rclcpp::get_logger("map_saver_cli");
+
+  std::vector<std::string> arguments(argv + 1, argv + argc);
+  std::vector<rclcpp::Parameter> params_from_args;
+  for (auto it = arguments.begin(); it != arguments.end(); it++) {
+    if (*it == "-h") {
+      std::cout << USAGE_STRING << std::endl;
+      return 0;
+    } else if (*it == "-f") {
+      if (++it == arguments.end()) {
+        RCLCPP_WARN(logger, "Argument ignored: -f should be followed by a value.");
+        continue;
+      }
+      params_from_args.emplace_back("output_file_no_ext", *it);
+    } else if (*it == "--occ") {
+      if (++it == arguments.end()) {
+        RCLCPP_WARN(logger, "Argument ignored: --occ should be followed by a value.");
+        continue;
+      }
+      params_from_args.emplace_back("threshold_occupied", atoi(it->c_str()));
+    } else if (*it == "--free") {
+      if (++it == arguments.end()) {
+        RCLCPP_WARN(logger, "Argument ignored: --free should be followed by a value.");
+        continue;
+      }
+      params_from_args.emplace_back("threshold_free", atoi(it->c_str()));
+    } else if (*it == "--mode") {
+      if (++it == arguments.end()) {
+        RCLCPP_WARN(logger, "Argument ignored: --mode should be followed by a value.");
+        continue;
+      }
+      params_from_args.emplace_back("map_mode", *it);
+    } else if (*it == "--fmt") {
+      if (++it == arguments.end()) {
+        RCLCPP_WARN(logger, "Argument ignored: --fmt should be followed by a value.");
+        continue;
+      }
+      params_from_args.emplace_back("image_format", *it);
+    } else {
+      RCLCPP_WARN(logger, "Ignoring unrecognized argument '%s'", it->c_str());
+    }
+  }
+
+  auto node = std::make_shared<nav2_map_server::MapSaver>(
+    rclcpp::NodeOptions().parameter_overrides(params_from_args));
   auto future = node->map_saved_future();
   int retcode;
 

@@ -28,8 +28,8 @@
  */
 
 #include "nav2_map_server/map_saver.hpp"
-
 #include <fstream>
+#include "Magick++.h"
 
 #include <cstdio>
 #include <memory>
@@ -42,55 +42,11 @@
 
 namespace nav2_map_server
 {
-const std::string USAGE_STRING{
-  "Usage: \n"
-  "  map_saver -h\n"
-  "  map_saver [--occ <threshold_occupied>] [--free <threshold_free>] "
-  "[-f <mapname>] [ROS remapping args]"};
-
-MapSaver::MapSaver(const rclcpp::NodeOptions & options) : Node("map_saver"), save_next_map_promise{}
+MapSaver::MapSaver(const rclcpp::NodeOptions & options)
+: Node("map_saver", options), save_next_map_promise{}
 {
+  Magick::InitializeMagick(nullptr);
   {
-    auto & arguments = options.arguments();
-    std::vector<rclcpp::Parameter> params_from_args;
-    for (auto it = arguments.begin(); it != arguments.end(); it++) {
-      std::cerr << "processing argument " << *it;
-      if (*it == "-h") {
-        params_from_args.emplace_back("show_help", true);
-      } else if (*it == "-f") {
-        if (++it == arguments.end()) {
-          RCLCPP_WARN(get_logger(), "Argument ignored: -f should be followed by a value.");
-          continue;
-        }
-        params_from_args.emplace_back("output_file_no_ext", *it);
-      } else if (*it == "--occ") {
-        if (++it == arguments.end()) {
-          RCLCPP_WARN(get_logger(), "Argument ignored: --occ should be followed by a value.");
-          continue;
-        }
-        params_from_args.emplace_back("threshold_occupied", atoi(it->c_str()));
-      } else if (*it == "--free") {
-        if (++it == arguments.end()) {
-          RCLCPP_WARN(get_logger(), "Argument ignored: --free should be followed by a value.");
-          continue;
-        }
-        params_from_args.emplace_back("threshold_free", atoi(it->c_str()));
-      } else if (*it == "--mode") {
-        if (++it == arguments.end()) {
-          RCLCPP_WARN(get_logger(), "Argument ignored: --mode should be followed by a value.");
-          continue;
-        }
-        params_from_args.emplace_back("map_mode", *it);
-      } else {
-        RCLCPP_WARN(get_logger(), "Ignoring unrecognized argument '%s'", it->c_str());
-      }
-    }
-
-    show_help = declare_parameter("show_help", false);
-    if (show_help) {
-      std::cout << USAGE_STRING << std::endl;
-      return;
-    }
     mapname_ = declare_parameter("output_file_no_ext", "map");
     if (mapname_.empty()) {
       throw std::runtime_error("Map name not provided");
@@ -121,6 +77,8 @@ MapSaver::MapSaver(const rclcpp::NodeOptions & options) : Node("map_saver"), sav
       map_mode = TRINARY;
     }
 
+    image_format = declare_parameter("image_format", "pgm");
+
     RCLCPP_INFO(get_logger(), "Waiting for the map");
     map_sub_ = create_subscription<nav_msgs::msg::OccupancyGrid>(
       "map", rclcpp::SystemDefaultsQoS(),
@@ -135,43 +93,56 @@ void MapSaver::try_write_map_to_file(const nav_msgs::msg::OccupancyGrid & map)
     logger, "Received a %d X %d map @ %.3f m/pix", map.info.width, map.info.height,
     map.info.resolution);
 
-  std::string mapdatafile = mapname_ + ".pgm";
-  RCLCPP_INFO(logger, "Writing map occupancy data to %s", mapdatafile.c_str());
+  std::string mapdatafile = mapname_ + "." + image_format;
   {
-    std::ofstream map_data(mapdatafile);
-    map_data.exceptions(~std::ostream::goodbit);
-
+    Magick::Geometry size{map.info.width, map.info.height};
+    Magick::Color color{"red"};
+    Magick::Image image(size, color);
     // map_data.open(mapdatafile.c_str());
     //    fprintf(
     //      map_data, "P5\n# CREATOR: map_saver.cpp %.3f m/pix\n%d %d\n255\n", map.info.resolution,
     //      map->info.width, map->info.height);
-    map_data << "P5\n"
-             << "# CREATOR: map_saver.cpp " << map.info.resolution << " m/pix\n"
-             << map.info.width << " " << map.info.height << "\n255\n";
-    map_data.exceptions();
     for (size_t y = 0; y < map.info.height; y++) {
       for (size_t x = 0; x < map.info.width; x++) {
         size_t i = x + (map.info.height - y - 1) * map.info.width;
-        int8_t raw_pixel = map.data[i];
+        int8_t map_cell = map.data[i];
+
+        Magick::Color pixel;
+
         switch (map_mode) {
           case TRINARY:
-            map_data.put(
-              raw_pixel == -1
-                ? 205
-                : raw_pixel <= threshold_free_ ? 254 : raw_pixel >= threshold_occupied_ ? 0 : 205);
+            if (map_cell == -1) {
+              pixel = Magick::ColorGray(205 / 255.0);
+            } else if (map_cell <= threshold_free_) {
+              pixel = Magick::ColorGray(254 / 255.0);
+            } else if (map_cell >= threshold_occupied_) {
+              pixel = Magick::ColorGray(0 / 255.0);
+            } else {
+              pixel = Magick::ColorGray(205 / 255.0);
+            }
             break;
           case SCALE:
-            map_data.put(
-              raw_pixel == -1
-                ? 205
-                : raw_pixel <= threshold_free_ ? 254 : raw_pixel >= threshold_occupied_ ? 0 : 205);
+            if (map_cell == -1) {
+              pixel = Magick::Color{};
+            } else {
+              pixel = Magick::ColorGray(map_cell / 100);
+            }
             break;
           case RAW:
-            map_data.put(raw_pixel);
+            if (map_cell == -1) {
+              pixel = Magick::ColorGray(1.0);
+            } else {
+              pixel = Magick::ColorGray(map_cell * 256.0 / 100.0);
+            }
             break;
+          default:
+            throw std::runtime_error("Invalid map mode");
         }
+        image.pixelColor(x, y, pixel);
       }
     }
+    RCLCPP_INFO(logger, "Writing map occupancy data to %s", mapdatafile.c_str());
+    image.write(mapdatafile);
   }
 
   std::string mapmetadatafile = mapname_ + ".yaml";

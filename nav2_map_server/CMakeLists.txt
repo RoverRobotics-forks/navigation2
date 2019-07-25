@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.5)
 project(nav2_map_server)
 
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake_modules)
+
 find_package(ament_cmake REQUIRED)
 find_package(nav2_common REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -12,6 +14,10 @@ find_package(yaml_cpp_vendor REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(nav2_util REQUIRED)
+find_package(GraphicsMagick++ REQUIRED)
+
+include_directories(SYSTEM ${MAGICK++_INCLUDE_DIRS})
+link_libraries(${MAGICK++_LIBRARIES})
 
 nav2_package()
 
@@ -30,7 +36,7 @@ add_executable(${map_server_executable}
 )
 
 add_executable(${map_saver_executable}
-  src/map_saver_main.cpp
+  src/map_saver_cli.cpp
 )
 
 set(library_name ${map_server_executable}_core)
@@ -49,12 +55,14 @@ set(map_server_dependencies
   std_msgs
   tf2
   nav2_util
-)
+  Magick++
+  )
 
 set(map_saver_dependencies
   rclcpp
   nav_msgs
   tf2
+  Magick++
 )
 
 ament_target_dependencies(${map_server_executable}
