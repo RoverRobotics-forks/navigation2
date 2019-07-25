@@ -52,18 +52,18 @@ MapSaver::MapSaver(const rclcpp::NodeOptions & options)
       throw std::runtime_error("Map name not provided");
     }
     threshold_occupied_ = declare_parameter("threshold_occupied", 65);
-    if (threshold_occupied_ < 1 || 100 < threshold_occupied_) {
-      throw std::runtime_error("Threshold_occupied must be between 1 and 100");
+    if (100 < threshold_occupied_) {
+      throw std::runtime_error("Threshold_occupied must be 100 or less");
     }
     threshold_free_ = declare_parameter("threshold_free", 25);
-    if (threshold_free_ < 0 || 100 < threshold_free_) {
-      throw std::runtime_error("Free threshold must be between 0 and 100");
+    if (threshold_free_ < 0) {
+      throw std::runtime_error("Free threshold must be 0 or greater");
     }
     if (threshold_occupied_ <= threshold_free_) {
       throw std::runtime_error("Threshold_free must be smaller than threshold_occupied");
     }
 
-    std::string mode_str = declare_parameter("mode", "trinary");
+    std::string mode_str = declare_parameter("map_mode", "trinary");
     if (mode_str == "trinary") {
       map_mode = TRINARY;
     } else if (mode_str == "scale") {
@@ -71,10 +71,10 @@ MapSaver::MapSaver(const rclcpp::NodeOptions & options)
     } else if (mode_str == "raw") {
       map_mode = RAW;
     } else {
-      RCLCPP_WARN(
-        get_logger(), "Mode parameter not recognized: '%s', using default value (trinary)",
-        mode_str.c_str());
       map_mode = TRINARY;
+      RCLCPP_WARN(
+        get_logger(), "Map mode parameter not recognized: '%s', using default value (trinary)",
+        mode_str.c_str());
     }
 
     image_format = declare_parameter("image_format", "pgm");
@@ -93,15 +93,29 @@ void MapSaver::try_write_map_to_file(const nav_msgs::msg::OccupancyGrid & map)
     logger, "Received a %d X %d map @ %.3f m/pix", map.info.width, map.info.height,
     map.info.resolution);
 
+  Magick::CoderInfo info(image_format);
+  if (!info.isWritable()) {
+    image_format = "pgm";
+    RCLCPP_WARN(logger, "Format is not writable. Falling back to %s", image_format.c_str());
+  }
+
   std::string mapdatafile = mapname_ + "." + image_format;
+
   {
     Magick::Geometry size{map.info.width, map.info.height};
     Magick::Color color{"red"};
     Magick::Image image(size, color);
-    // map_data.open(mapdatafile.c_str());
-    //    fprintf(
-    //      map_data, "P5\n# CREATOR: map_saver.cpp %.3f m/pix\n%d %d\n255\n", map.info.resolution,
-    //      map->info.width, map->info.height);
+    // Since we only need to support 100 different pixel levels, 8 bits is fine
+    image.depth(8);
+    image.magick(image_format);
+    RCLCPP_INFO(logger, "mode %d", map_mode);
+    if (!image.matte() && map_mode == SCALE) {
+      RCLCPP_WARN(
+        logger,
+        "Map mode 'scale' requires transparency, but format '%s' does not support it. Consider "
+        "switching image format to 'PNG'.",
+        image_format.c_str());
+    }
     for (size_t y = 0; y < map.info.height; y++) {
       for (size_t x = 0; x < map.info.width; x++) {
         size_t i = x + (map.info.height - y - 1) * map.info.width;
@@ -125,7 +139,7 @@ void MapSaver::try_write_map_to_file(const nav_msgs::msg::OccupancyGrid & map)
             if (map_cell == -1) {
               pixel = Magick::Color{};
             } else {
-              pixel = Magick::ColorGray(map_cell / 100);
+              pixel = Magick::ColorGray((100.0 - map_cell) / 100.0);
             }
             break;
           case RAW:

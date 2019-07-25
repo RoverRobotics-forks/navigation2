@@ -37,7 +37,7 @@ const std::string USAGE_STRING{
   "Usage: \n"
   "  map_saver -h\n"
   "  map_saver [--occ <threshold_occupied>] [--free <threshold_free>] [--fmt <image_format>] "
-  "[-f <mapname>] [ROS remapping args]"};
+  "[--mode trinary/scale/raw] [-f <mapname>] [ROS remapping args]"};
 
 int main(int argc, char ** argv)
 {
