@@ -16,9 +16,9 @@
 #define NAV2_MAP_SERVER__OCC_GRID_LOADER_HPP_
 
 #include <memory>
-#include <nav2_map_server/occ_grid_loader.hpp>
 #include <string>
 #include <vector>
+#include "nav2_map_server/occ_grid_loader.hpp"
 
 #include "map_mode.hpp"
 #include "nav2_util/lifecycle_node.hpp"
@@ -28,7 +28,6 @@
 
 namespace nav2_map_server
 {
-
 class OccGridLoader : public nav2_util::LifecycleHelperInterface
 {
 public:

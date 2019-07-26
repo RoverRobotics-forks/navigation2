@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef NAV2_MAP_SERVER__MAP_GENERATOR_HPP_
-#define NAV2_MAP_SERVER__MAP_GENERATOR_HPP_
+#ifndef NAV2_MAP_SERVER__MAP_SAVER_HPP_
+#define NAV2_MAP_SERVER__MAP_SAVER_HPP_
 
 #include <string>
 #include "map_mode.hpp"
@@ -47,4 +47,4 @@ protected:
 
 }  // namespace nav2_map_server
 
-#endif  // NAV2_MAP_SERVER__MAP_GENERATOR_HPP_
+#endif  // NAV2_MAP_SERVER__MAP_SAVER_HPP_
