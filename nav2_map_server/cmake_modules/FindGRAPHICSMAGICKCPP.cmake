@@ -12,25 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# CMake script for finding GraphicsMagick++, the C++ interface for the GraphicsMagick library
+# CMake script for finding Magick++, the C++ interface for the
+# GraphicsMagick library
 #
 # Output variables:
-#  GraphicsMagick++_FOUND        - system has GraphicsMagick++
-#  GraphicsMagick++_INCLUDE_DIRS - include directories for GraphicsMagick
-#  GraphicsMagick++_LIBRARIES    - libraries you need to link to
+#  GRAPHICSMAGICKCPP_FOUND        - system has GraphicsMagick Magick++
+#  GRAPHICSMAGICKCPP_INCLUDE_DIRS - include directories for Magick++
+#  GRAPHICSMAGICKCPP_LIBRARIES    - libraries you need to link to
 include(FindPackageHandleStandardArgs)
 
-find_path(GraphicsMagick++_INCLUDE_DIRS
+find_path(GRAPHICSMAGICKCPP_INCLUDE_DIRS
   NAMES "Magick++.h"
-  PATH_SUFFIXES GraphicsMagick
-  )
+  PATH_SUFFIXES GraphicsMagick)
 
-find_library(GraphicsMagick++_LIBRARIES
-  NAMES "GraphicsMagick++"
-  )
+find_library(GRAPHICSMAGICKCPP_LIBRARIES
+  NAMES "GraphicsMagick++")
 
 find_package_handle_standard_args(
-  GraphicsMagick++
-  GraphicsMagick++_LIBRARIES
-  GraphicsMagick++_INCLUDE_DIRS
-)
+  GRAPHICSMAGICKCPP
+  GRAPHICSMAGICKCPP__LIBRARIES
+  GRAPHICSMAGICKCPP_INCLUDE_DIRS)

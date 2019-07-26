@@ -12,26 +12,21 @@ find_package(yaml_cpp_vendor REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(nav2_util REQUIRED)
-find_package(GraphicsMagick++ REQUIRED)
-
+find_package(GRAPHICSMAGICKCPP REQUIRED)
 
 nav2_package()
 
-include_directories(
-  include
-)
+include_directories(include)
 
 set(map_server_executable map_server)
 
 set(map_saver_executable map_saver)
 
 add_executable(${map_server_executable}
-  src/main.cpp
-)
+  src/main.cpp)
 
 add_executable(${map_saver_executable}
-  src/map_saver_cli.cpp
-)
+  src/map_saver_cli.cpp)
 
 set(library_name ${map_server_executable}_core)
 
@@ -39,8 +34,7 @@ add_library(${library_name} SHARED
   src/occ_grid_loader.cpp
   src/map_server.cpp
   src/map_saver.cpp
-  src/map_mode.cpp
-)
+  src/map_mode.cpp)
 
 set(map_server_dependencies
   rclcpp
@@ -49,54 +43,41 @@ set(map_server_dependencies
   yaml_cpp_vendor
   std_msgs
   tf2
-  nav2_util
-  Magick++
-  )
+  nav2_util)
 
 set(map_saver_dependencies
   rclcpp
   nav_msgs
-  tf2
-  Magick++
-)
+  tf2)
 
 ament_target_dependencies(${map_server_executable}
-  ${map_server_dependencies}
-)
+  ${map_server_dependencies})
 
 ament_target_dependencies(${map_saver_executable}
-  ${map_saver_dependencies}
-)
+  ${map_saver_dependencies})
 
 ament_target_dependencies(${library_name}
-  ${map_server_dependencies}
-)
+  ${map_server_dependencies})
 
 target_link_libraries(${map_server_executable}
-  ${library_name}
-)
+  ${library_name})
 
 target_link_libraries(${map_saver_executable}
-  ${library_name}
-)
+  ${library_name})
 
 target_include_directories(${library_name} PRIVATE
-  SYSTEM ${GraphicsMagick++_INCLUDE_DIRS}
-  )
+  SYSTEM ${GRAPHICSMAGICKCPP_INCLUDE_DIRS})
 
 target_link_libraries(${library_name}
-  ${GraphicsMagick++_LIBRARIES}
-)
+  ${GRAPHICSMAGICKCPP_LIBRARIES})
 
 install(TARGETS ${map_server_executable} ${library_name} ${map_saver_executable}
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
-  RUNTIME DESTINATION lib/${PROJECT_NAME}
-)
+  RUNTIME DESTINATION lib/${PROJECT_NAME})
 
 install(DIRECTORY include/
-  DESTINATION include/
-)
+  DESTINATION include/)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
