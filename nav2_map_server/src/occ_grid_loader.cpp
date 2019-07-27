@@ -30,106 +30,68 @@ using namespace std::chrono_literals;
 
 namespace nav2_map_server
 {
-
 OccGridLoader::OccGridLoader(
-  rclcpp_lifecycle::LifecycleNode::SharedPtr node,
-  std::string & yaml_filename)
+  rclcpp_lifecycle::LifecycleNode::SharedPtr node, std::string & yaml_filename)
 : node_(node), yaml_filename_(yaml_filename)
 {
   RCLCPP_INFO(node_->get_logger(), "OccGridLoader: Creating");
 }
 
-OccGridLoader::~OccGridLoader()
+OccGridLoader::~OccGridLoader() {RCLCPP_INFO(node_->get_logger(), "OccGridLoader: Destroying");}
+
+/// Get the given subnode value.
+/// The only reason this function exists is to wrap the exceptions in slightly nicer error messages,
+/// including the name of the failed key
+template<typename T>
+T yaml_get_value(const YAML::Node & node, std::string key)
 {
-  RCLCPP_INFO(node_->get_logger(), "OccGridLoader: Destroying");
+  try {
+    return node[key].as<T>();
+  } catch (YAML::Exception & e) {
+    std::stringstream ss;
+    ss << "Failed to parse YAML tag '" << key << "' at line " << e.mark.line << ", column " <<
+      e.mark.column << " for reason: " << e.msg;
+    throw std::runtime_error(ss.str());
+  }
 }
 
-nav2_util::CallbackReturn
-OccGridLoader::on_configure(const rclcpp_lifecycle::State & /*state*/)
+OccGridLoader::LoadParameters OccGridLoader::load_map_yaml(const std::string & yaml_filename)
 {
-  RCLCPP_INFO(node_->get_logger(), "OccGridLoader: Configuring");
-
-  msg_ = std::make_unique<nav_msgs::msg::OccupancyGrid>();
-
-  // The YAML document from which to get the conversion parameters
-  YAML::Node doc = YAML::LoadFile(yaml_filename_);
+  YAML::Node doc = YAML::LoadFile(yaml_filename);
   LoadParameters loadParameters;
 
-  // Get the name of the map file
-  std::string map_filename;
-  try {
-    map_filename = doc["image"].as<std::string>();
-    if (map_filename.size() == 0) {
-      throw std::runtime_error("The image tag cannot be an empty string");
-    }
-    if (map_filename[0] != '/') {
-      // dirname can modify what you pass it
-      char * fname_copy = strdup(yaml_filename_.c_str());
-      map_filename = std::string(dirname(fname_copy)) + '/' + map_filename;
-      free(fname_copy);
-    }
-  } catch (YAML::Exception & e) {
-    std::string err("'" + yaml_filename_ +
-      "' does not contain an image tag or it is invalid: " + e.what());
-    throw std::runtime_error(err);
+  auto image_file_name = doc["image"].as<std::string>();
+  if (image_file_name.empty()) {
+    throw std::runtime_error("The image tag cannot be an empty string");
+  }
+  if (image_file_name[0] != '/') {
+    // since dirname takes a mutable char *
+    std::vector<char> fname_copy(yaml_filename.begin(), yaml_filename.end());
+    image_file_name = std::string(dirname(fname_copy.data())) + '/' + image_file_name;
+  }
+  loadParameters.image_file_name = image_file_name;
+  loadParameters.resolution = doc["resolution"].as<double>();
+  loadParameters.origin = doc["origin"].as<std::vector<double>>();
+  if (loadParameters.origin.size() != 3) {
+    throw std::runtime_error(
+            "origin should have 3 elements, not " + std::to_string(loadParameters.origin.size()));
   }
 
-  try {
-    loadParameters.resolution = doc["resolution"].as<double>();
-  } catch (YAML::Exception & e) {
-    std::string err("The map does not contain a resolution tag or it is invalid: %s", e.what());
-    throw std::runtime_error(err);
-  }
+  loadParameters.free_thresh = doc["free_thresh"].as<double>();
+  loadParameters.occupied_thresh = doc["occupied_thresh"].as<double>();
 
-  try {
-    loadParameters.origin[0] = doc["origin"][0].as<double>();
-    loadParameters.origin[1] = doc["origin"][1].as<double>();
-    loadParameters.origin[2] = doc["origin"][2].as<double>();
-  } catch (YAML::Exception & e) {
-    std::string err("The map does not contain an origin tag or it is invalid: %s", e.what());
-    throw std::runtime_error(err);
-  }
-
-  try {
-    loadParameters.free_thresh = doc["free_thresh"].as<double>();
-  } catch (YAML::Exception & e) {
-    std::string err("The map does not contain a free_thresh tag or it is invalid: %s", e.what());
-    throw std::runtime_error(err);
-  }
-
-  try {
-    loadParameters.occupied_thresh = doc["occupied_thresh"].as<double>();
-  } catch (YAML::Exception & e) {
-    std::string err("The map does not contain an "
-      "occupied_thresh tag or it is invalid: %s", e.what());
-    throw std::runtime_error(err);
-  }
-
-  std::string mode_str;
-  try {
-    mode_str = doc["mode"].as<std::string>();
-
-    // Convert the string version of the mode name to one of the enumeration values
-    try {
-      std::cerr << "parsing map made " << mode_str << std::endl;
-      loadParameters.mode = map_mode_from_string(mode_str);
-    } catch (std::invalid_argument &) {
-      RCLCPP_WARN(
-        node_->get_logger(), "Mode parameter not recognized: '%s', using default value (trinary)",
-        mode_str.c_str());
-      loadParameters.mode = MapMode::Trinary;
-    }
-  } catch (YAML::Exception & e) {
-    RCLCPP_WARN(node_->get_logger(),
-      "Mode parameter not set, using default value (trinary): %s", e.what());
+  auto map_mode_node = doc["mode"];
+  if (!map_mode_node.IsDefined()) {
     loadParameters.mode = MapMode::Trinary;
+  } else {
+    loadParameters.mode = map_mode_from_string(map_mode_node.as<std::string>());
   }
 
+  auto negate_node = doc["negate"];
   try {
-    loadParameters.negate = doc["negate"].as<int>();
-  } catch (YAML::Exception & e) {
-    std::string err("The map does not contain a negate tag or it is invalid: %s", e.what());
-    throw std::runtime_error(err);
+    loadParameters.negate = negate_node.as<int>();
+  } catch (YAML::BadConversion &) {
+    loadParameters.negate = negate_node.as<bool>();
   }
 
   RCLCPP_DEBUG(node_->get_logger(), "resolution: %f", loadParameters.resolution);
@@ -138,11 +100,27 @@ OccGridLoader::on_configure(const rclcpp_lifecycle::State & /*state*/)
   RCLCPP_DEBUG(node_->get_logger(), "origin[2]: %f", loadParameters.origin[2]);
   RCLCPP_DEBUG(node_->get_logger(), "free_thresh: %f", loadParameters.free_thresh);
   RCLCPP_DEBUG(node_->get_logger(), "occupied_thresh: %f", loadParameters.occupied_thresh);
-  RCLCPP_DEBUG(node_->get_logger(), "mode_str: %s", mode_str.c_str());
-  RCLCPP_DEBUG(node_->get_logger(), "mode: %d", loadParameters.mode);
+  RCLCPP_DEBUG(node_->get_logger(), "mode: %s", map_mode_to_string(loadParameters.mode));
   RCLCPP_DEBUG(node_->get_logger(), "negate: %d", loadParameters.negate);
 
-  loadMapFromFile(map_filename, loadParameters);
+  return loadParameters;
+}
+
+nav2_util::CallbackReturn OccGridLoader::on_configure(const rclcpp_lifecycle::State & /*state*/)
+{
+  RCLCPP_INFO(node_->get_logger(), "OccGridLoader: Configuring");
+
+  msg_ = std::make_unique<nav_msgs::msg::OccupancyGrid>();
+  LoadParameters loadParameters;
+  try {
+    loadParameters = load_map_yaml(yaml_filename_);
+  } catch (YAML::Exception & e) {
+    RCLCPP_ERROR(
+      node_->get_logger(), "Failed to parse map YAML loaded from file %s for reason: %s",
+      yaml_filename_.c_str(), e.what());
+    throw;
+  }
+  loadMapFromFile(loadParameters);
 
   // Create a service callback handle
   auto handle_occ_callback = [this](
@@ -163,8 +141,7 @@ OccGridLoader::on_configure(const rclcpp_lifecycle::State & /*state*/)
   return nav2_util::CallbackReturn::SUCCESS;
 }
 
-nav2_util::CallbackReturn
-OccGridLoader::on_activate(const rclcpp_lifecycle::State & /*state*/)
+nav2_util::CallbackReturn OccGridLoader::on_activate(const rclcpp_lifecycle::State & /*state*/)
 {
   RCLCPP_INFO(node_->get_logger(), "OccGridLoader: Activating");
 
@@ -179,8 +156,7 @@ OccGridLoader::on_activate(const rclcpp_lifecycle::State & /*state*/)
   return nav2_util::CallbackReturn::SUCCESS;
 }
 
-nav2_util::CallbackReturn
-OccGridLoader::on_deactivate(const rclcpp_lifecycle::State & /*state*/)
+nav2_util::CallbackReturn OccGridLoader::on_deactivate(const rclcpp_lifecycle::State & /*state*/)
 {
   RCLCPP_INFO(node_->get_logger(), "OccGridLoader: Deactivating");
 
@@ -189,8 +165,7 @@ OccGridLoader::on_deactivate(const rclcpp_lifecycle::State & /*state*/)
   return nav2_util::CallbackReturn::SUCCESS;
 }
 
-nav2_util::CallbackReturn
-OccGridLoader::on_cleanup(const rclcpp_lifecycle::State & /*state*/)
+nav2_util::CallbackReturn OccGridLoader::on_cleanup(const rclcpp_lifecycle::State & /*state*/)
 {
   RCLCPP_INFO(node_->get_logger(), "OccGridLoader: Cleaning up");
 
@@ -201,14 +176,13 @@ OccGridLoader::on_cleanup(const rclcpp_lifecycle::State & /*state*/)
   return nav2_util::CallbackReturn::SUCCESS;
 }
 
-void OccGridLoader::loadMapFromFile(
-  const std::string & map_name, const LoadParameters & loadParameters)
+void OccGridLoader::loadMapFromFile(const LoadParameters & loadParameters)
 {
   Magick::InitializeMagick(nullptr);
   nav_msgs::msg::OccupancyGrid msg;
   Magick::Image img;
 
-  img.read(map_name);
+  img.read(loadParameters.image_file_name);
 
   // todo: do we need img.throwImageException()? here
   /*
@@ -272,9 +246,9 @@ void OccGridLoader::loadMapFromFile(
   msg.header.frame_id = frame_id_;
   msg.header.stamp = node_->now();
 
-  RCLCPP_DEBUG(node_->get_logger(), "Read map %s: %d X %d map @ %.3lf m/cell",
-    map_name.c_str(),
-    msg.info.width, msg.info.height, msg.info.resolution);
+  RCLCPP_DEBUG(
+    node_->get_logger(), "Read map %s: %d X %d map @ %.3lf m/cell",
+    loadParameters.image_file_name.c_str(), msg.info.width, msg.info.height, msg.info.resolution);
   *msg_ = msg;
 }
 

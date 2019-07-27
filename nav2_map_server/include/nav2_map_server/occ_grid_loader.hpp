@@ -49,6 +49,7 @@ protected:
 
   typedef struct
   {
+    std::string image_file_name;
     double resolution{0};
     std::vector<double> origin{0, 0, 0};
     double free_thresh;
@@ -57,8 +58,11 @@ protected:
     bool negate;
   } LoadParameters;
 
+  // Load and parse the given YAML file
+  LoadParameters load_map_yaml(const std::string & yaml_filename_);
+
   // Load the image and generate an OccupancyGrid
-  void loadMapFromFile(const std::string & filename, const LoadParameters & loadParameters);
+  void loadMapFromFile(const LoadParameters & loadParameters);
 
   // A service to provide the occupancy grid (GetMap) and the message to return
   rclcpp::Service<nav_msgs::srv::GetMap>::SharedPtr occ_service_;

@@ -140,6 +140,7 @@ TEST_F(MapLoaderTest, loadValidPNG)
   auto test_png = path(TEST_DIR) / path(g_valid_png_file);
 
   nav2_map_server::OccGridLoader::LoadParameters loadParameters;
+  loadParameters.image_file_name = test_png;
   loadParameters.resolution = g_valid_image_res;
   loadParameters.origin[0] = 0;
   loadParameters.origin[1] = 0;
@@ -153,7 +154,7 @@ TEST_F(MapLoaderTest, loadValidPNG)
   // the msg_ member must be initialized
   map_loader_->msg_ = std::make_unique<nav_msgs::msg::OccupancyGrid>();
 
-  ASSERT_NO_THROW(map_loader_->loadMapFromFile(test_png.string(), loadParameters));
+  ASSERT_NO_THROW(map_loader_->loadMapFromFile(loadParameters));
   nav_msgs::msg::OccupancyGrid map_msg = map_loader_->getOccupancyGrid();
 
   EXPECT_FLOAT_EQ(map_msg.info.resolution, g_valid_image_res);
@@ -172,6 +173,7 @@ TEST_F(MapLoaderTest, loadValidBMP)
   auto test_bmp = path(TEST_DIR) / path(g_valid_bmp_file);
 
   nav2_map_server::OccGridLoader::LoadParameters loadParameters;
+  loadParameters.image_file_name = test_bmp;
   loadParameters.resolution = g_valid_image_res;
   loadParameters.origin[0] = 0;
   loadParameters.origin[1] = 0;
@@ -185,7 +187,7 @@ TEST_F(MapLoaderTest, loadValidBMP)
   // the msg_ member must be initialized
   map_loader_->msg_ = std::make_unique<nav_msgs::msg::OccupancyGrid>();
 
-  ASSERT_NO_THROW(map_loader_->loadMapFromFile(test_bmp.string(), loadParameters));
+  ASSERT_NO_THROW(map_loader_->loadMapFromFile(loadParameters));
   nav_msgs::msg::OccupancyGrid map_msg = map_loader_->getOccupancyGrid();
 
   EXPECT_FLOAT_EQ(map_msg.info.resolution, g_valid_image_res);
@@ -203,6 +205,7 @@ TEST_F(MapLoaderTest, loadInvalidFile)
   auto test_invalid = path(TEST_DIR) / path("foo");
 
   nav2_map_server::OccGridLoader::LoadParameters loadParameters;
+  loadParameters.image_file_name = test_invalid;
   loadParameters.resolution = g_valid_image_res;
   loadParameters.origin[0] = 0;
   loadParameters.origin[1] = 0;
@@ -212,6 +215,5 @@ TEST_F(MapLoaderTest, loadInvalidFile)
   loadParameters.mode = nav2_map_server::MapMode::Trinary;
   loadParameters.negate = 0;
 
-  ASSERT_THROW(map_loader_->loadMapFromFile(
-      test_invalid.string(), loadParameters), std::runtime_error);
+  ASSERT_THROW(map_loader_->loadMapFromFile(loadParameters), std::runtime_error);
 }

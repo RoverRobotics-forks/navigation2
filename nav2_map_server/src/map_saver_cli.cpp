@@ -22,7 +22,7 @@
 
 const char * USAGE_STRING{
   "Usage: \n"
-  "  map_saver -h\n"
+  "  map_saver -h/--help\n"
   "  map_saver [--occ <threshold_occupied>] [--free <threshold_free>] [--fmt <image_format>] "
   "[--mode trinary/scale/raw] [-f <mapname>] [ROS remapping args]"};
 
@@ -35,7 +35,7 @@ int main(int argc, char ** argv)
   std::vector<std::string> arguments(argv + 1, argv + argc);
   std::vector<rclcpp::Parameter> params_from_args;
   for (auto it = arguments.begin(); it != arguments.end(); it++) {
-    if (*it == "-h") {
+    if (*it == "-h" || *it == "--help") {
       std::cout << USAGE_STRING << std::endl;
       return 0;
     } else if (*it == "-f") {

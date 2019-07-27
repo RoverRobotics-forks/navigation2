@@ -86,7 +86,6 @@ void MapSaver::try_write_map_to_file(const nav_msgs::msg::OccupancyGrid & map)
   }
 
   std::string mapdatafile = mapname_ + "." + image_format;
-
   {
     Magick::Geometry size{map.info.width, map.info.height};
     Magick::Color color{"red"};
@@ -94,8 +93,10 @@ void MapSaver::try_write_map_to_file(const nav_msgs::msg::OccupancyGrid & map)
     // Since we only need to support 100 different pixel levels, 8 bits is fine
     image.depth(8);
     image.magick(image_format);
-    RCLCPP_INFO(logger, "mode %d", map_mode);
-    if (!image.matte() && map_mode == MapMode::Scale) {
+    if (
+      map_mode == MapMode::Scale &&
+      (image_format == "pgm" || image_format == "jpg" || image_format == "jpeg"))
+    {
       RCLCPP_WARN(
         logger,
         "Map mode 'scale' requires transparency, but format '%s' does not support it. Consider "
@@ -146,7 +147,6 @@ void MapSaver::try_write_map_to_file(const nav_msgs::msg::OccupancyGrid & map)
   }
 
   std::string mapmetadatafile = mapname_ + ".yaml";
-  RCLCPP_INFO(logger, "Writing map metadata to %s", mapmetadatafile.c_str());
   {
     std::ofstream yaml(mapmetadatafile);
 
@@ -163,7 +163,7 @@ void MapSaver::try_write_map_to_file(const nav_msgs::msg::OccupancyGrid & map)
     e << YAML::Key << "resolution" << YAML::Value << map.info.resolution;
     e << YAML::Key << "origin" << YAML::Flow << YAML::BeginSeq << map.info.origin.position.x <<
       map.info.origin.position.y << yaw << YAML::EndSeq;
-    e << YAML::Key << "negate" << YAML::Value << false;
+    e << YAML::Key << "negate" << YAML::Value << 0;
     e << YAML::Key << "occupied_thresh" << YAML::Value << threshold_occupied_ / 100.0;
     e << YAML::Key << "free_thresh" << YAML::Value << threshold_free_ / 100.0;
     e << YAML::Key << YAML::Key;
