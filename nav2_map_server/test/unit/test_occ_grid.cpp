@@ -215,5 +215,5 @@ TEST_F(MapLoaderTest, loadInvalidFile)
   loadParameters.mode = nav2_map_server::MapMode::Trinary;
   loadParameters.negate = 0;
 
-  ASSERT_THROW(map_loader_->loadMapFromFile(loadParameters), std::runtime_error);
+  ASSERT_ANY_THROW(map_loader_->loadMapFromFile(loadParameters));
 }

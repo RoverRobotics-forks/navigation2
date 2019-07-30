@@ -59,6 +59,7 @@ protected:
   } LoadParameters;
 
   // Load and parse the given YAML file
+  /// @throw YAML::Exception
   LoadParameters load_map_yaml(const std::string & yaml_filename_);
 
   // Load the image and generate an OccupancyGrid

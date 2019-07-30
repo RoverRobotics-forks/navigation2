@@ -63,7 +63,7 @@ MapSaver::MapSaver(const rclcpp::NodeOptions & options)
         mode_str.c_str());
     }
 
-    image_format = declare_parameter("image_format", "pgm");
+    image_format = declare_parameter("image_format", map_mode == MapMode::Scale ? "png" : "pgm");
 
     RCLCPP_INFO(get_logger(), "Waiting for the map");
     map_sub_ = create_subscription<nav_msgs::msg::OccupancyGrid>(
@@ -81,18 +81,23 @@ void MapSaver::try_write_map_to_file(const nav_msgs::msg::OccupancyGrid & map)
 
   Magick::CoderInfo info(image_format);
   if (!info.isWritable()) {
-    image_format = "pgm";
+    image_format = "png";
     RCLCPP_WARN(logger, "Format is not writable. Falling back to %s", image_format.c_str());
   }
 
   std::string mapdatafile = mapname_ + "." + image_format;
   {
-    Magick::Geometry size{map.info.width, map.info.height};
-    Magick::Color color{"red"};
-    Magick::Image image(size, color);
+    // should never see this color, so the initialization value is just for debugging
+    Magick::Image image({map.info.width, map.info.height}, "red");
+
+    // In scale mode, we need the alpha (matte) channel. Else, we don't.
+    // NOTE: GraphicsMagick seems to have trouble loading the alpha channel when saved with
+    // Magick::GreyscaleMatte, so we use TrueColorMatte instead.
+    image.type(map_mode == MapMode::Scale ? Magick::TrueColorMatteType : Magick::GrayscaleType);
+
     // Since we only need to support 100 different pixel levels, 8 bits is fine
     image.depth(8);
-    image.magick(image_format);
+
     if (
       map_mode == MapMode::Scale &&
       (image_format == "pgm" || image_format == "jpg" || image_format == "jpeg"))
@@ -105,36 +110,38 @@ void MapSaver::try_write_map_to_file(const nav_msgs::msg::OccupancyGrid & map)
     }
     for (size_t y = 0; y < map.info.height; y++) {
       for (size_t x = 0; x < map.info.width; x++) {
-        size_t i = x + (map.info.height - y - 1) * map.info.width;
-        int8_t map_cell = map.data[i];
+        int8_t map_cell = map.data[map.info.width * (map.info.height - y - 1) + x];
 
         Magick::Color pixel;
 
         switch (map_mode) {
           case MapMode::Trinary:
-            if (map_cell == -1) {
+            if (map_cell < 0 || 100 < map_cell) {
               pixel = Magick::ColorGray(205 / 255.0);
             } else if (map_cell <= threshold_free_) {
               pixel = Magick::ColorGray(254 / 255.0);
-            } else if (map_cell >= threshold_occupied_) {
+            } else if (threshold_occupied_ <= map_cell) {
               pixel = Magick::ColorGray(0 / 255.0);
             } else {
               pixel = Magick::ColorGray(205 / 255.0);
             }
             break;
           case MapMode::Scale:
-            if (map_cell == -1) {
-              pixel = Magick::Color{};
+            if (map_cell < 0 || 100 < map_cell) {
+              pixel = Magick::ColorGray{0.5};
+              pixel.alphaQuantum(TransparentOpacity);
             } else {
-              pixel = Magick::ColorGray((100.0 - map_cell) / 100.0);
+              pixel = Magick::ColorGray{(100.0 - map_cell) / 100.0};
             }
             break;
           case MapMode::Raw:
-            if (map_cell == -1) {
-              pixel = Magick::ColorGray(1.0);
+            Magick::Quantum q;
+            if (map_cell < 0 || 100 < map_cell) {
+              q = MaxRGB;
             } else {
-              pixel = Magick::ColorGray(map_cell * 256.0 / 100.0);
+              q = map_cell / 255.0 * MaxRGB;
             }
+            pixel = Magick::Color(q, q, q);
             break;
           default:
             throw std::runtime_error("Invalid map mode");
@@ -142,6 +149,7 @@ void MapSaver::try_write_map_to_file(const nav_msgs::msg::OccupancyGrid & map)
         image.pixelColor(x, y, pixel);
       }
     }
+
     RCLCPP_INFO(logger, "Writing map occupancy data to %s", mapdatafile.c_str());
     image.write(mapdatafile);
   }
@@ -166,7 +174,6 @@ void MapSaver::try_write_map_to_file(const nav_msgs::msg::OccupancyGrid & map)
     e << YAML::Key << "negate" << YAML::Value << 0;
     e << YAML::Key << "occupied_thresh" << YAML::Value << threshold_occupied_ / 100.0;
     e << YAML::Key << "free_thresh" << YAML::Value << threshold_free_ / 100.0;
-    e << YAML::Key << YAML::Key;
 
     if (!e.good()) {
       RCLCPP_WARN(
