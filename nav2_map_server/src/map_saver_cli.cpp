@@ -76,18 +76,33 @@ int main(int argc, char ** argv)
   auto node = std::make_shared<nav2_map_server::MapSaver>(
     rclcpp::NodeOptions().parameter_overrides(params_from_args));
   auto future = node->map_saved_future();
+
   int retcode;
-
-  rclcpp::spin_until_future_complete(node, future);
-
-  try {
-    future.get();
-    std::cout << "Map saver succeeded" << std::endl;
-    retcode = 0;
-  } catch (std::exception & e) {
-    std::cout << "Map saver failed" << std::endl;
-    retcode = 1;
+  switch (rclcpp::spin_until_future_complete(node, future)) {
+    case rclcpp::executor::FutureReturnCode::INTERRUPTED:
+      std::cout << "Map saver failed: interrupted" << std::endl;
+      retcode = 1;
+      break;
+    case rclcpp::executor::FutureReturnCode::TIMEOUT:
+      std::cout << "Map saver failed: timeout" << std::endl;
+      retcode = 1;
+      break;
+    case rclcpp::executor::FutureReturnCode::SUCCESS:
+      try {
+        future.get();
+        std::cout << "Map saver succeeded" << std::endl;
+        retcode = 0;
+      } catch (std::exception & e) {
+        std::cout << "Map saver failed: " << e.what() << std::endl;
+        retcode = 1;
+      }
+      break;
+    default:
+      std::cerr << "this should never happen" << std::endl;
+      retcode = -1;
+      break;
   }
+
   rclcpp::shutdown();
   return retcode;
 }
