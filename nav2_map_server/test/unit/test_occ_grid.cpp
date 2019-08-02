@@ -131,9 +131,6 @@ protected:
 
 // Try to load a valid PNG file.  Succeeds if no exception is thrown, and if
 // the loaded image matches the known dimensions and content of the file.
-//
-// This test can fail on OS X, due to an apparent limitation of the
-// underlying SDL_Image library.
 
 TEST_F(MapLoaderTest, loadValidPNG)
 {
