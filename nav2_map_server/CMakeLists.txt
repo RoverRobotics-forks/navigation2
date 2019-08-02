@@ -65,8 +65,8 @@ target_link_libraries(${map_server_executable}
 target_link_libraries(${map_saver_executable}
   ${library_name})
 
-target_include_directories(${library_name} PRIVATE
-  SYSTEM ${GRAPHICSMAGICKCPP_INCLUDE_DIRS})
+target_include_directories(${library_name} SYSTEM PRIVATE
+   ${GRAPHICSMAGICKCPP_INCLUDE_DIRS})
 
 target_link_libraries(${library_name}
   ${GRAPHICSMAGICKCPP_LIBRARIES})
