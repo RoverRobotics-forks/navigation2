@@ -79,6 +79,53 @@ MapSaver::MapSaver(const rclcpp::NodeOptions & options)
     }
 
     image_format = declare_parameter("image_format", map_mode == MapMode::Scale ? "png" : "pgm");
+    std::transform(
+      image_format.begin(), image_format.end(), image_format.begin(),
+      [](unsigned char c) {return std::tolower(c);});
+    const std::vector<std::string> BLESSED_FORMATS{"bmp", "pgm", "png"};
+    if (
+      std::find(BLESSED_FORMATS.begin(), BLESSED_FORMATS.end(), image_format) ==
+      BLESSED_FORMATS.end())
+    {
+      std::stringstream ss;
+      bool first = true;
+      for (auto & format_name : BLESSED_FORMATS) {
+        if (!first) {
+          ss << ", ";
+        }
+        ss << "'" << format_name << "'";
+        first = false;
+      }
+      RCLCPP_WARN(
+        get_logger(), "Requested image format '%s' is not one of the recommended formats: %s",
+        image_format.c_str(), ss.str().c_str());
+    }
+    const std::string FALLBACK_FORMAT = "png";
+
+    try {
+      Magick::CoderInfo info(image_format);
+      if (!info.isWritable()) {
+        RCLCPP_WARN(
+          get_logger(), "Format '%s' is not writable. Using '%s' instead",
+          image_format.c_str(), FALLBACK_FORMAT.c_str());
+        image_format = FALLBACK_FORMAT;
+      }
+    } catch (Magick::ErrorOption & e) {
+      RCLCPP_WARN(
+        get_logger(), "Format '%s' is not usable. Using '%s' instead:\n%s",
+        image_format.c_str(), FALLBACK_FORMAT.c_str(), e.what());
+      image_format = FALLBACK_FORMAT;
+    }
+    if (
+      map_mode == MapMode::Scale &&
+      (image_format == "pgm" || image_format == "jpg" || image_format == "jpeg"))
+    {
+      RCLCPP_WARN(
+        get_logger(),
+        "Map mode 'scale' requires transparency, but format '%s' does not support it. Consider "
+        "switching image format to 'png'.",
+        image_format.c_str());
+    }
 
     RCLCPP_INFO(get_logger(), "Waiting for the map");
     map_sub_ = create_subscription<nav_msgs::msg::OccupancyGrid>(
@@ -89,16 +136,10 @@ MapSaver::MapSaver(const rclcpp::NodeOptions & options)
 
 void MapSaver::try_write_map_to_file(const nav_msgs::msg::OccupancyGrid & map)
 {
-  rclcpp::Logger logger = this->get_logger();
+  auto logger = get_logger();
   RCLCPP_INFO(
     logger, "Received a %d X %d map @ %.3f m/pix", map.info.width, map.info.height,
     map.info.resolution);
-
-  Magick::CoderInfo info(image_format);
-  if (!info.isWritable()) {
-    image_format = "png";
-    RCLCPP_WARN(logger, "Format is not writable. Falling back to %s", image_format.c_str());
-  }
 
   std::string mapdatafile = mapname_ + "." + image_format;
   {
@@ -113,16 +154,6 @@ void MapSaver::try_write_map_to_file(const nav_msgs::msg::OccupancyGrid & map)
     // Since we only need to support 100 different pixel levels, 8 bits is fine
     image.depth(8);
 
-    if (
-      map_mode == MapMode::Scale &&
-      (image_format == "pgm" || image_format == "jpg" || image_format == "jpeg"))
-    {
-      RCLCPP_WARN(
-        logger,
-        "Map mode 'scale' requires transparency, but format '%s' does not support it. Consider "
-        "switching image format to 'png'.",
-        image_format.c_str());
-    }
     for (size_t y = 0; y < map.info.height; y++) {
       for (size_t x = 0; x < map.info.width; x++) {
         int8_t map_cell = map.data[map.info.width * (map.info.height - y - 1) + x];
