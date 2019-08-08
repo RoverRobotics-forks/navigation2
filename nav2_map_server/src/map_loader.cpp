@@ -32,8 +32,6 @@
 #include "nav2_util/map_loader/map_loader.hpp"
 #include <stdlib.h>
 #include <stdio.h>
-// We use SDL_image to load the image from disk
-#include <SDL/SDL_image.h>
 #include <string>
 #include <stdexcept>
 #include "tf2/LinearMath/Quaternion.h"

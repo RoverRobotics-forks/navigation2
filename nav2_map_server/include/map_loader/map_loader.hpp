@@ -36,24 +36,10 @@
 #include "nav_msgs/msg/occupancy_grid.hpp"
 #include "geometry_msgs/msg/twist.hpp"
 
-/** Map mode
- *  Default: TRINARY -
- *      value >= occ_th - Occupied (100)
- *      value <= free_th - Free (0)
- *      otherwise - Unknown
- *  SCALE -
- *      alpha < 1.0 - Unknown
- *      value >= occ_th - Occupied (100)
- *      value <= free_th - Free (0)
- *      otherwise - f( (free_th, occ_th) ) = (0, 100)
- *          (linearly map in between values to (0,100)
- *  RAW -
- *      value = value
- */
-enum MapMode {TRINARY, SCALE, RAW};
 
 namespace map_loader
 {
+  nav_msgs::msg::OccupancyGrid loadMapFromFile(const std::string yaml_file_name);
 
 /** Read the image from file and fill out the resp object, for later
  * use when our services are requested.

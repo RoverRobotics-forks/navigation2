@@ -22,7 +22,6 @@ ament_target_dependencies(${library_name}
 
 add_subdirectory(pf)
 add_subdirectory(map)
-add_subdirectory(map_loader)
 add_subdirectory(motion_model)
 add_subdirectory(sensors)
 

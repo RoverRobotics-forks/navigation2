@@ -9,11 +9,7 @@ First, install all ROS2 dependencies from the ROS2 Installation page: https://gi
 
 Second, install the dependencies for this repository:
 ```sh
-RUN apt-get install -y \
-    libsdl-image1.2 \
-    libsdl-image1.2-dev \
-    libsdl1.2debian \
-    libsdl1.2-dev
+rosdep install --from-paths src/navigation2 -i -y
 ```
 
 Third, ensure there are no ROS environment variables set in your terminal or `.bashrc` file before taking the steps below.*

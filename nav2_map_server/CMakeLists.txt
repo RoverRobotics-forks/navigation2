@@ -23,7 +23,7 @@ set(map_server_executable map_server)
 set(map_saver_executable map_saver)
 
 add_executable(${map_server_executable}
-  src/main.cpp)
+  src/map_server_main.cpp)
 
 add_executable(${map_saver_executable}
   src/map_saver_cli.cpp)
