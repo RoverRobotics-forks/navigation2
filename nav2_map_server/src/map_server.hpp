@@ -16,12 +16,12 @@
 #define NAV2_MAP_SERVER__MAP_SERVER_HPP_
 
 #include <memory>
-#include "nav2_util/lifecycle_node.hpp"
 #include "nav2_util/lifecycle_helper_interface.hpp"
-
-namespace nav2_map_server
+#include "nav2_util/lifecycle_node.hpp"
+#include "rclcpp/rclcpp.hpp"
+#include "nav_msgs/msg/occupancy_grid.hpp"
+namespace nav2_map
 {
-
 class MapServer : public nav2_util::LifecycleNode
 {
 public:
@@ -29,6 +29,8 @@ public:
   ~MapServer();
 
 protected:
+  rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr pub_map;
+
   // Implement the lifecycle interface
   nav2_util::CallbackReturn on_configure(const rclcpp_lifecycle::State & state) override;
   nav2_util::CallbackReturn on_activate(const rclcpp_lifecycle::State & state) override;
@@ -41,6 +43,6 @@ protected:
   std::unique_ptr<nav2_util::LifecycleHelperInterface> map_loader_;
 };
 
-}  // namespace nav2_map_server
+}  // namespace nav2_map
 
 #endif  // NAV2_MAP_SERVER__MAP_SERVER_HPP_

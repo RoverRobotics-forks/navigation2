@@ -59,7 +59,7 @@ public:
 
 RclCppFixture g_rclcppfixture;
 
-class TestMapLoader : public nav2_map_server::OccGridLoader
+class TestMapLoader : public nav2_map::OccGridLoader
 {
   FRIEND_TEST(MapLoaderTest, loadValidPNG);
   FRIEND_TEST(MapLoaderTest, loadValidBMP);
@@ -144,7 +144,7 @@ TEST_F(MapLoaderTest, loadValidPNG)
   loadParameters.origin[2] = 0;
   loadParameters.free_thresh = 0.196;
   loadParameters.occupied_thresh = 0.65;
-  loadParameters.mode = nav2_map_server::MapMode::Trinary;
+  loadParameters.mode = nav2_map::MapMode::Trinary;
   loadParameters.negate = 0;
 
   // In order to loadMapFromFile without going through the Configure and Activate states,
@@ -177,7 +177,7 @@ TEST_F(MapLoaderTest, loadValidBMP)
   loadParameters.origin[2] = 0;
   loadParameters.free_thresh = 0.196;
   loadParameters.occupied_thresh = 0.65;
-  loadParameters.mode = nav2_map_server::MapMode::Trinary;
+  loadParameters.mode = nav2_map::MapMode::Trinary;
   loadParameters.negate = 0;
 
   // In order to loadMapFromFile without going through the Configure and Activate states,
@@ -209,7 +209,7 @@ TEST_F(MapLoaderTest, loadInvalidFile)
   loadParameters.origin[2] = 0;
   loadParameters.free_thresh = 0.196;
   loadParameters.occupied_thresh = 0.65;
-  loadParameters.mode = nav2_map_server::MapMode::Trinary;
+  loadParameters.mode = nav2_map::MapMode::Trinary;
   loadParameters.negate = 0;
 
   ASSERT_ANY_THROW(map_loader_->loadMapFromFile(loadParameters));

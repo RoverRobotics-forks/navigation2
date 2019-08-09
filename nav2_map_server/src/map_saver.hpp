@@ -20,7 +20,7 @@
 #include "nav_msgs/srv/get_map.hpp"
 #include "rclcpp/rclcpp.hpp"
 
-namespace nav2_map_server
+namespace nav2_map
 {
 class MapSaver : public rclcpp::Node
 {
@@ -42,9 +42,9 @@ protected:
   std::string mapname_;
   int threshold_occupied_;
   int threshold_free_;
-  nav2_map_server::MapMode map_mode;
+  nav2_map::MapMode map_mode;
 };
 
-}  // namespace nav2_map_server
+}  // namespace nav2_map
 
 #endif  // NAV2_MAP_SERVER__MAP_SAVER_HPP_

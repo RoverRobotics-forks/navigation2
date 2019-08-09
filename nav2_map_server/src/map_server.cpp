@@ -12,38 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "nav2_map_server/map_server.hpp"
+#include "map_server.hpp"
 
 #include <fstream>
 #include <memory>
 #include <stdexcept>
 #include <string>
 
-#include "nav2_map_server/occ_grid_loader.hpp"
 #include "nav2_util/node_utils.hpp"
+#include "occupancy_grid_io.hpp"
 #include "yaml-cpp/yaml.h"
 
 using namespace std::chrono_literals;
 
-namespace nav2_map_server
+namespace nav2_map
 {
-
-MapServer::MapServer()
-: nav2_util::LifecycleNode("map_server")
+MapServer::MapServer() : nav2_util::LifecycleNode("map_server")
 {
   RCLCPP_INFO(get_logger(), "Creating");
 
-  // Declare the node parameters
   declare_parameter("yaml_filename", rclcpp::ParameterValue(std::string("map.yaml")));
 }
 
-MapServer::~MapServer()
-{
-  RCLCPP_INFO(get_logger(), "Destroying");
-}
+MapServer::~MapServer() { RCLCPP_INFO(get_logger(), "Destroying"); }
 
-nav2_util::CallbackReturn
-MapServer::on_configure(const rclcpp_lifecycle::State & state)
+nav2_util::CallbackReturn MapServer::on_configure(const rclcpp_lifecycle::State & state)
 {
   RCLCPP_INFO(get_logger(), "Configuring");
 
@@ -70,9 +63,7 @@ MapServer::on_configure(const rclcpp_lifecycle::State & state)
   }
 
   // Create the correct map loader for the specified map type
-  if (map_type == "occupancy") {
-    map_loader_ = std::make_unique<OccGridLoader>(shared_from_this(), yaml_filename);
-  } else {
+  if (map_type != "occupancy") {
     std::string msg = "Cannot load unknown map type: '" + map_type + "'";
     throw std::runtime_error(msg);
   }
@@ -82,24 +73,21 @@ MapServer::on_configure(const rclcpp_lifecycle::State & state)
   return nav2_util::CallbackReturn::SUCCESS;
 }
 
-nav2_util::CallbackReturn
-MapServer::on_activate(const rclcpp_lifecycle::State & state)
+nav2_util::CallbackReturn MapServer::on_activate(const rclcpp_lifecycle::State & state)
 {
   RCLCPP_INFO(get_logger(), "Activating");
   map_loader_->on_activate(state);
   return nav2_util::CallbackReturn::SUCCESS;
 }
 
-nav2_util::CallbackReturn
-MapServer::on_deactivate(const rclcpp_lifecycle::State & state)
+nav2_util::CallbackReturn MapServer::on_deactivate(const rclcpp_lifecycle::State & state)
 {
   RCLCPP_INFO(get_logger(), "Deactivating");
   map_loader_->on_deactivate(state);
   return nav2_util::CallbackReturn::SUCCESS;
 }
 
-nav2_util::CallbackReturn
-MapServer::on_cleanup(const rclcpp_lifecycle::State & state)
+nav2_util::CallbackReturn MapServer::on_cleanup(const rclcpp_lifecycle::State & state)
 {
   RCLCPP_INFO(get_logger(), "Cleaning up");
 
@@ -109,18 +97,16 @@ MapServer::on_cleanup(const rclcpp_lifecycle::State & state)
   return nav2_util::CallbackReturn::SUCCESS;
 }
 
-nav2_util::CallbackReturn
-MapServer::on_error(const rclcpp_lifecycle::State &)
+nav2_util::CallbackReturn MapServer::on_error(const rclcpp_lifecycle::State &)
 {
   RCLCPP_FATAL(get_logger(), "Lifecycle node entered error state");
   return nav2_util::CallbackReturn::SUCCESS;
 }
 
-nav2_util::CallbackReturn
-MapServer::on_shutdown(const rclcpp_lifecycle::State &)
+nav2_util::CallbackReturn MapServer::on_shutdown(const rclcpp_lifecycle::State &)
 {
   RCLCPP_INFO(get_logger(), "Shutting down");
   return nav2_util::CallbackReturn::SUCCESS;
 }
 
-}  // namespace nav2_map_server
+}  // namespace nav2_map

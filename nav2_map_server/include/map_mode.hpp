@@ -17,7 +17,7 @@
 
 #include <string>
 #include <vector>
-namespace nav2_map_server
+namespace nav2_map
 {
 /// Describes the relation between image pixel values and map occupancy status (0-100; -1)
 /// Lightness refers to the mean of a given pixel's RGB channels on a scale from 0 to 255.
@@ -50,6 +50,6 @@ const char * map_mode_to_string(MapMode map_mode);
 /// @throw std::invalid_argument if the name does not name a map mode
 /// @return map mode corresponding to the string
 MapMode map_mode_from_string(std::string map_mode_name);
-}  // namespace nav2_map_server
+}  // namespace nav2_map
 
 #endif  // NAV2_MAP_SERVER__MAP_MODE_HPP_

@@ -17,7 +17,7 @@
 #include <string>
 #include <vector>
 
-#include "nav2_map_server/map_saver.hpp"
+#include "map_saver.hpp"
 #include "rclcpp/rclcpp.hpp"
 
 const char * USAGE_STRING{
@@ -73,7 +73,7 @@ int main(int argc, char ** argv)
     }
   }
 
-  auto node = std::make_shared<nav2_map_server::MapSaver>(
+  auto node = std::make_shared<nav2_map::MapSaver>(
     rclcpp::NodeOptions().parameter_overrides(params_from_args));
   auto future = node->map_saved_future();
 

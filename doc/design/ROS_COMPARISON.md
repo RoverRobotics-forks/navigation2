@@ -4,7 +4,7 @@
 AMCL and map_server were ported to ROS2 with minimal functional changes, but some refactoring.
 
   * amcl -> [nav2_amcl](/nav2_amcl/README.md)
-  * map_server -> [nav2_map_server](/nav2_map_server/README.md)
+  * map_server -> [nav2_map](/nav2_map/README.md)
 
 ![Move Base 1](./move_base_compare_1.png)
 

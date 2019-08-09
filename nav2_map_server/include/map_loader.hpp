@@ -37,7 +37,7 @@
 #include "geometry_msgs/msg/twist.hpp"
 
 
-namespace map_loader
+namespace nav2_map
 {
   nav_msgs::msg::OccupancyGrid loadMapFromFile(const std::string yaml_file_name);
 

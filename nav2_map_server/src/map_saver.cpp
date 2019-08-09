@@ -28,7 +28,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "nav2_map_server/map_saver.hpp"
+#include "map_saver.hpp"
 
 #include <cstdio>
 #include <fstream>
@@ -37,15 +37,13 @@
 #include <utility>
 
 #include "Magick++.h"
-#include "nav2_map_server/map_mode.hpp"
-#include "nav_msgs/msg/occupancy_grid.h"
+#include "map_mode.hpp"
 #include "nav_msgs/srv/get_map.hpp"
+#include "occupancy_grid_io.hpp"
 #include "rclcpp/rclcpp.hpp"
-#include "tf2/LinearMath/Matrix3x3.h"
-#include "tf2/LinearMath/Quaternion.h"
 #include "yaml-cpp/yaml.h"
 
-namespace nav2_map_server
+namespace nav2_map
 {
 MapSaver::MapSaver(const rclcpp::NodeOptions & options)
 : Node("map_saver", options), save_next_map_promise{}
@@ -81,12 +79,11 @@ MapSaver::MapSaver(const rclcpp::NodeOptions & options)
     image_format = declare_parameter("image_format", map_mode == MapMode::Scale ? "png" : "pgm");
     std::transform(
       image_format.begin(), image_format.end(), image_format.begin(),
-      [](unsigned char c) {return std::tolower(c);});
+      [](unsigned char c) { return std::tolower(c); });
     const std::vector<std::string> BLESSED_FORMATS{"bmp", "pgm", "png"};
     if (
       std::find(BLESSED_FORMATS.begin(), BLESSED_FORMATS.end(), image_format) ==
-      BLESSED_FORMATS.end())
-    {
+      BLESSED_FORMATS.end()) {
       std::stringstream ss;
       bool first = true;
       for (auto & format_name : BLESSED_FORMATS) {
@@ -106,20 +103,19 @@ MapSaver::MapSaver(const rclcpp::NodeOptions & options)
       Magick::CoderInfo info(image_format);
       if (!info.isWritable()) {
         RCLCPP_WARN(
-          get_logger(), "Format '%s' is not writable. Using '%s' instead",
-          image_format.c_str(), FALLBACK_FORMAT.c_str());
+          get_logger(), "Format '%s' is not writable. Using '%s' instead", image_format.c_str(),
+          FALLBACK_FORMAT.c_str());
         image_format = FALLBACK_FORMAT;
       }
     } catch (Magick::ErrorOption & e) {
       RCLCPP_WARN(
-        get_logger(), "Format '%s' is not usable. Using '%s' instead:\n%s",
-        image_format.c_str(), FALLBACK_FORMAT.c_str(), e.what());
+        get_logger(), "Format '%s' is not usable. Using '%s' instead:\n%s", image_format.c_str(),
+        FALLBACK_FORMAT.c_str(), e.what());
       image_format = FALLBACK_FORMAT;
     }
     if (
       map_mode == MapMode::Scale &&
-      (image_format == "pgm" || image_format == "jpg" || image_format == "jpeg"))
-    {
+      (image_format == "pgm" || image_format == "jpg" || image_format == "jpeg")) {
       RCLCPP_WARN(
         get_logger(),
         "Map mode 'scale' requires transparency, but format '%s' does not support it. Consider "
@@ -136,101 +132,12 @@ MapSaver::MapSaver(const rclcpp::NodeOptions & options)
 
 void MapSaver::try_write_map_to_file(const nav_msgs::msg::OccupancyGrid & map)
 {
-  auto logger = get_logger();
   RCLCPP_INFO(
-    logger, "Received a %d X %d map @ %.3f m/pix", map.info.width, map.info.height,
+    get_logger(), "Received a %d X %d map @ %.3f m/pix", map.info.width, map.info.height,
     map.info.resolution);
-
-  std::string mapdatafile = mapname_ + "." + image_format;
-  {
-    // should never see this color, so the initialization value is just for debugging
-    Magick::Image image({map.info.width, map.info.height}, "red");
-
-    // In scale mode, we need the alpha (matte) channel. Else, we don't.
-    // NOTE: GraphicsMagick seems to have trouble loading the alpha channel when saved with
-    // Magick::GreyscaleMatte, so we use TrueColorMatte instead.
-    image.type(map_mode == MapMode::Scale ? Magick::TrueColorMatteType : Magick::GrayscaleType);
-
-    // Since we only need to support 100 different pixel levels, 8 bits is fine
-    image.depth(8);
-
-    for (size_t y = 0; y < map.info.height; y++) {
-      for (size_t x = 0; x < map.info.width; x++) {
-        int8_t map_cell = map.data[map.info.width * (map.info.height - y - 1) + x];
-
-        Magick::Color pixel;
-
-        switch (map_mode) {
-          case MapMode::Trinary:
-            if (map_cell < 0 || 100 < map_cell) {
-              pixel = Magick::ColorGray(205 / 255.0);
-            } else if (map_cell <= threshold_free_) {
-              pixel = Magick::ColorGray(254 / 255.0);
-            } else if (threshold_occupied_ <= map_cell) {
-              pixel = Magick::ColorGray(0 / 255.0);
-            } else {
-              pixel = Magick::ColorGray(205 / 255.0);
-            }
-            break;
-          case MapMode::Scale:
-            if (map_cell < 0 || 100 < map_cell) {
-              pixel = Magick::ColorGray{0.5};
-              pixel.alphaQuantum(TransparentOpacity);
-            } else {
-              pixel = Magick::ColorGray{(100.0 - map_cell) / 100.0};
-            }
-            break;
-          case MapMode::Raw:
-            Magick::Quantum q;
-            if (map_cell < 0 || 100 < map_cell) {
-              q = MaxRGB;
-            } else {
-              q = map_cell / 255.0 * MaxRGB;
-            }
-            pixel = Magick::Color(q, q, q);
-            break;
-          default:
-            throw std::runtime_error("Invalid map mode");
-        }
-        image.pixelColor(x, y, pixel);
-      }
-    }
-
-    RCLCPP_INFO(logger, "Writing map occupancy data to %s", mapdatafile.c_str());
-    image.write(mapdatafile);
-  }
-
-  std::string mapmetadatafile = mapname_ + ".yaml";
-  {
-    std::ofstream yaml(mapmetadatafile);
-
-    geometry_msgs::msg::Quaternion orientation = map.info.origin.orientation;
-    tf2::Matrix3x3 mat(tf2::Quaternion(orientation.x, orientation.y, orientation.z, orientation.w));
-    double yaw, pitch, roll;
-    mat.getEulerYPR(yaw, pitch, roll);
-
-    YAML::Emitter e;
-    e << YAML::Precision(3);
-    e << YAML::BeginMap;
-    e << YAML::Key << "image" << YAML::Value << mapdatafile;
-    e << YAML::Key << "mode" << YAML::Value << map_mode_to_string(map_mode);
-    e << YAML::Key << "resolution" << YAML::Value << map.info.resolution;
-    e << YAML::Key << "origin" << YAML::Flow << YAML::BeginSeq << map.info.origin.position.x <<
-      map.info.origin.position.y << yaw << YAML::EndSeq;
-    e << YAML::Key << "negate" << YAML::Value << 0;
-    e << YAML::Key << "occupied_thresh" << YAML::Value << threshold_occupied_ / 100.0;
-    e << YAML::Key << "free_thresh" << YAML::Value << threshold_free_ / 100.0;
-
-    if (!e.good()) {
-      RCLCPP_WARN(
-        logger, "YAML writer failed with an error %s. The map metadata may be invalid.",
-        e.GetLastError().c_str());
-    }
-
-    RCLCPP_INFO(logger, "Writing map metadata to %s", mapmetadatafile.c_str());
-    std::ofstream(mapmetadatafile) << e.c_str();
-  }
-  RCLCPP_INFO(logger, "Map saved");
+  RCLCPP_INFO(get_logger(), "Writing to file");
+  write_map(map, mapname_, image_format, map_mode, threshold_free_, threshold_occupied_);
+  RCLCPP_INFO(get_logger(), "Map saved");
 }
 
 void MapSaver::mapCallback(const nav_msgs::msg::OccupancyGrid::SharedPtr map)
@@ -246,4 +153,4 @@ void MapSaver::mapCallback(const nav_msgs::msg::OccupancyGrid::SharedPtr map)
     current_promise.set_exception(std::current_exception());
   }
 }
-}  // namespace nav2_map_server
+}  // namespace nav2_map
