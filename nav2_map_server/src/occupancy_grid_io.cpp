@@ -1,14 +1,13 @@
 #include "occupancy_grid_io.hpp"
+
 #include <cmath>
 #include <fstream>
-#include "GraphicsMagick/Magick++.h"
-#include "geometry_msgs/msg/pose.hpp"
-#include "iostream"
-#include "map_mode.hpp"
-#include "nav_msgs/msg/occupancy_grid.hpp"
-#include "yaml-cpp/yaml.h"
 
+#include "GraphicsMagick/Magick++.h"
+#include "iostream"
+#include "nav_msgs/msg/occupancy_grid.hpp"
 #include "rcpputils/filesystem_helper.hpp"
+#include "yaml-cpp/yaml.h"
 
 using path = rcpputils::fs::path;
 
@@ -17,23 +16,6 @@ using nav_msgs::msg::OccupancyGrid;
 
 namespace nav2_map
 {
-struct MapYAMLData
-{
-  std::string image_file_name;
-  double meters_per_pixel{};
-  Pose origin;
-  double free_thresh{};
-  double occupied_thresh{};
-  MapMode mode{};
-  bool negate{};
-};
-
-struct MapImageData
-{
-  std::vector<int8_t> data;
-  unsigned width{0};
-  unsigned height{0};
-};
 
 using fn_color_to_occupancy = std::function<int8_t(Magick::Color)>;
 using fn_occupancy_to_color = std::function<Magick::Color(int8_t)>;

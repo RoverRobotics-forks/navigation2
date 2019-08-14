@@ -26,14 +26,14 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifndef TEST_CONSTANTS__TEST_CONSTANTS_H_
+#define TEST_CONSTANTS__TEST_CONSTANTS_H_
 
 /* Author: Brian Gerkey */
 
 /* This file contains global constants shared among tests */
 
 /* Note that these must be changed if the test image changes */
-
-#include "test_constants/test_constants.h"
 
 const unsigned int g_valid_image_width = 10;
 const unsigned int g_valid_image_height = 10;
@@ -57,5 +57,6 @@ const char g_valid_image_content[] = {
 
 const char * g_valid_png_file = "testmap.png";
 const char * g_valid_bmp_file = "testmap.bmp";
-
 const float g_valid_image_res = 0.1;
+
+#endif  // TEST_CONSTANTS__TEST_CONSTANTS_H_

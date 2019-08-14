@@ -16,20 +16,24 @@
 #define NAV2_MAP_SERVER__MAP_SERVER_HPP_
 
 #include <memory>
-#include "nav2_util/lifecycle_helper_interface.hpp"
+
 #include "nav2_util/lifecycle_node.hpp"
-#include "rclcpp/rclcpp.hpp"
 #include "nav_msgs/msg/occupancy_grid.hpp"
+#include "nav_msgs/srv/get_map.hpp"
+#include "rclcpp/rclcpp.hpp"
+
 namespace nav2_map
 {
 class MapServer : public nav2_util::LifecycleNode
 {
 public:
   MapServer();
-  ~MapServer();
+  ~MapServer() override;
 
 protected:
   rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr pub_map;
+  rclcpp::Service<nav_msgs::srv::GetMap>::SharedPtr srv_map;
+  rclcpp::TimerBase::SharedPtr timer;
 
   // Implement the lifecycle interface
   nav2_util::CallbackReturn on_configure(const rclcpp_lifecycle::State & state) override;
@@ -39,8 +43,21 @@ protected:
   nav2_util::CallbackReturn on_shutdown(const rclcpp_lifecycle::State & state) override;
   nav2_util::CallbackReturn on_error(const rclcpp_lifecycle::State & state) override;
 
-  // The map loader that will actually do the work
-  std::unique_ptr<nav2_util::LifecycleHelperInterface> map_loader_;
+  // path to YAML file containing map to load
+  std::string yaml_filename;
+
+  // The frame ID used in the returned OccupancyGrid message
+  std::string frame_id;
+
+  // The name for the topic on which the map will be published
+  std::string topic_name;
+
+  // The name of the service for getting a map
+  std::string service_name;
+
+  nav_msgs::msg::OccupancyGrid::ConstSharedPtr map;
+
+  std::chrono::duration<double> map_topic_period{};
 };
 
 }  // namespace nav2_map

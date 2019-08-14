@@ -36,63 +36,57 @@ MapServer::MapServer() : nav2_util::LifecycleNode("map_server")
 
 MapServer::~MapServer() { RCLCPP_INFO(get_logger(), "Destroying"); }
 
-nav2_util::CallbackReturn MapServer::on_configure(const rclcpp_lifecycle::State & state)
+nav2_util::CallbackReturn MapServer::on_configure(const rclcpp_lifecycle::State &)
 {
   RCLCPP_INFO(get_logger(), "Configuring");
 
+  frame_id = declare_parameter("frame_id", "map");
+  service_name = declare_parameter("service_name", "map");
+  topic_name = declare_parameter("topic_name", "map");
+  map_topic_period = std::chrono::duration<double>(declare_parameter("topic_period_s", 2.0));
+
   // Get the name of the YAML file to use
-  std::string yaml_filename;
-  get_parameter("yaml_filename", yaml_filename);
-
-  // Make sure that there's a valid file there and open it up
-  std::ifstream fin(yaml_filename.c_str());
-  if (fin.fail()) {
-    throw std::runtime_error("Could not open '" + yaml_filename + "': file not found");
-  }
-
-  // The YAML document from which to get the conversion parameters
-  YAML::Node doc = YAML::LoadFile(yaml_filename);
-
-  // Get the map type so that we can create the correct map loader
-  std::string map_type;
-  try {
-    map_type = doc["map_type"].as<std::string>();
-  } catch (YAML::Exception &) {
-    // Default to occupancy grid if not specified in the YAML file
-    map_type = "occupancy";
-  }
-
-  // Create the correct map loader for the specified map type
-  if (map_type != "occupancy") {
-    std::string msg = "Cannot load unknown map type: '" + map_type + "'";
-    throw std::runtime_error(msg);
-  }
-
-  map_loader_->on_configure(state);
+  yaml_filename = declare_parameter("yaml_filename", "map.yaml");
 
   return nav2_util::CallbackReturn::SUCCESS;
 }
 
-nav2_util::CallbackReturn MapServer::on_activate(const rclcpp_lifecycle::State & state)
+nav2_util::CallbackReturn MapServer::on_activate(const rclcpp_lifecycle::State &)
 {
   RCLCPP_INFO(get_logger(), "Activating");
-  map_loader_->on_activate(state);
+
+  auto m = std::make_shared<nav_msgs::msg::OccupancyGrid>(loadMapFromFile(yaml_filename));
+  m->header.frame_id = frame_id;
+  m->header.stamp = now();
+  m->info.map_load_time = now();
+  map = m;
+
+  pub_map =
+    create_publisher<nav_msgs::msg::OccupancyGrid>(topic_name, rclcpp::QoS(1).transient_local());
+
+  srv_map = create_service<nav_msgs::srv::GetMap>(
+    service_name, [this](
+                    const std::shared_ptr<nav_msgs::srv::GetMap::Request>,
+                    std::shared_ptr<nav_msgs::srv::GetMap::Response> response) {
+      RCLCPP_INFO(get_logger(), "Handling map request");
+      response->map = *map;
+    });
+
+  timer = create_wall_timer(map_topic_period, [this]() { pub_map->publish(map); });
   return nav2_util::CallbackReturn::SUCCESS;
 }
 
-nav2_util::CallbackReturn MapServer::on_deactivate(const rclcpp_lifecycle::State & state)
+nav2_util::CallbackReturn MapServer::on_deactivate(const rclcpp_lifecycle::State &)
 {
   RCLCPP_INFO(get_logger(), "Deactivating");
-  map_loader_->on_deactivate(state);
+  pub_map.reset();
+  timer.reset();
   return nav2_util::CallbackReturn::SUCCESS;
 }
 
-nav2_util::CallbackReturn MapServer::on_cleanup(const rclcpp_lifecycle::State & state)
+nav2_util::CallbackReturn MapServer::on_cleanup(const rclcpp_lifecycle::State &)
 {
   RCLCPP_INFO(get_logger(), "Cleaning up");
-
-  map_loader_->on_cleanup(state);
-  map_loader_.reset();
 
   return nav2_util::CallbackReturn::SUCCESS;
 }

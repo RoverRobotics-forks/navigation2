@@ -16,8 +16,8 @@
 #include <rclcpp/rclcpp.hpp>
 #include <memory>
 
-#include "test_constants/test_constants.h"
-#include "nav2_map_server/occ_grid_loader.hpp"
+#include "test_constants.h"
+#include "nav2_map_server/occupancy_grid_io.hpp"
 #include "nav2_util/lifecycle_service_client.hpp"
 
 using lifecycle_msgs::msg::Transition;
